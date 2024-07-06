@@ -1,0 +1,3 @@
+https://samber.github.io/awesome-prometheus-alerts/rules#mysql
+
+해당 사이트 참조해서 Rule추가 
