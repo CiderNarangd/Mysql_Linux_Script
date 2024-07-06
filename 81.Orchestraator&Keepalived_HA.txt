@@ -1,0 +1,197 @@
+Orchestrator+Keepalived HA 구성
+
+Hostname		IP					MysqlServerID
+orc-mgr    		211.51.77.194
+orc-master		112.186.124.184		1
+orc-slave1		112.186.124.19		2
+orc-slave2		222.117.149.135		3
+
+VIP 			192.168.100.100
+
+vi /etc/hosts 등록
+sudo vi /etc/hosts
+orc-mgr    	211.51.77.194
+orc-master	112.186.124.184	
+orc-slave1	112.186.124.19	
+orc-slave2	222.117.149.135	
+
+
+--------------------리플리케이션 연결-------------------
+
+-->리플리케이션용 계정 생성(Master,Slave1,2 )
+CREATE USER 'my_repl'@'%' IDENTIFIED BY 'rlska123!@#';
+grant all privileges on *.* to 'my_repl'@'%';
+flush privileges;
+
+
+CHANGE REPLICATION SOURCE TO 
+	SOURCE_HOST = '112.186.124.184',
+	SOURCE_PORT = 3306,
+	SOURCE_USER = 'my_repl',
+	SOURCE_PASSWORD = 'rlska123!@#',
+	SOURCE_LOG_FILE = 'mysql-bin.000025',
+	SOURCE_LOG_POS = 157,
+	GET_SOURCE_PUBLIC_KEY =1;
+	
+
+---------------필요패키지 및 오케스트레이터 설치 & mysql 계정 셋팅----------
+--->필요 패키지 설치
+yum -y install epel-release
+yum -y install ncurses ncurses-devel ncurses-libs ncurses-static openssl openssl-devel bison readline gcc gcc-c++ make cmake glibc automake numactl numactl-devel libaio libaio-devel curl jq oniguruma
+
+**ncurses-static  nomatch --> 상관x
+
+
+----Orchestrator용 Mysql 계정 생성(master,slave1,2)
+CREATE USER 'orchestrator'@'%' IDENTIFIED BY 'rlska123!@#';
+GRANT SUPER, PROCESS, REPLICATION SLAVE, RELOAD ON *.* TO 'orchestrator'@'%';
+GRANT SELECT ON mysql.slave_master_info TO 'orchestrator'@'%';
+flush privileges;
+
+----매니저 서버용 Mysql 계정 생성(orc-mgr)
+Orchestator reposit db생성
+CREATE DATABASE orchestrator;
+CREATE USER 'orchestrator'@'127.0.0.1' IDENTIFIED BY 'rlska123!@#';
+GRANT ALL PRIVILEGES ON `orchestrator`.* TO 'orchestrator'@'127.0.0.1';
+
+
+------오케스트레이터 설치
+
+rpm -ivh https://github.com/openark/orchestrator/releases/download/v3.2.6/orchestrator-3.2.6-1.x86_64.rpm
+
+cd /usr/local/orchestrator/
+cp orchestrator-sample.conf.json orchestrator.conf.json
+
+vi orchestrator.conf.json
+orc_conf_json.txt
+
+systemctl start orchestrator.service
+
+방화벽 해제해서 외부에서 콘솔 접속 가능
+firewall-cmd --permanent --zone=public --add-port=3000/tcp
+firewall-cmd --reload
+firewall-cmd --list-all
+
+org-mgr 
+ip:3000 dashboard 접속후
+clust->discover 호스트 등록.
+
+
+---------------------------------------------
+VIP 설정
+
+
+Keepalived Install
+->Master,Slave1,2
+
+방화벽해제
+sudo firewall-cmd --permanent --add-protocol=vrrp
+sudo firewall-cmd --reload
+firewall-cmd --list-all
+
+
+yum -y install keepalived
+
+vi /etc/keepalived/keepalived.conf
+
+
+Master-> mcast_src_ip, priority 수정
+-------------------------------------
+! Configuration File for keepalived
+ 
+global_defs {
+   router_id MySQL_0
+}
+ 
+vrrp_script chk_mysql_port {
+    script "/db/chk_mysql.sh"
+    interval 2
+    weight -5
+    fall 2
+    rise 1
+}
+ 
+vrrp_instance VI_1 {
+    state MASTER
+    interface enp0s3
+    mcast_src_ip 112.186.124.184
+    virtual_router_id 51
+    priority 100
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {
+        192.168.100.100/24
+    }
+ 
+track_script {
+   chk_mysql_port
+}
+}
+
+------------------------------------------------------------------
+
+
+Slave  mcast_src_ip, priority 수정
+---------------------------------------------------------------------
+
+! Configuration File for keepalived
+ 
+global_defs {
+   router_id MySQL_0
+}
+ 
+vrrp_script chk_mysql_port {
+    script "/db/chk_mysql.sh"
+    interval 2
+    weight -5
+    fall 2
+    rise 1
+}
+ 
+vrrp_instance VI_1 {
+    state BACKUP
+    interface enp0s3
+    mcast_src_ip 222.117.149.135
+    virtual_router_id 51
+    priority 10
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {
+        192.168.100.100/24
+    }
+ 
+track_script {
+   chk_mysql_port
+}
+}
+
+---------------------------------------------------------------
+
+
+모든서버에서 (매니저 서버 제외)
+vi /db/chk_mysql.sh
+-------------------------------------------------------------
+#!/bin/bash
+counter=$(netstat -na|grep "LISTEN"|grep "3306"|wc -l)
+if [ "${counter}" -eq 0 ]; then
+    systemctl stop keepalived
+fi
+
+-------------------------------------------------------
+chmod +x /db/chk_mysql.sh
+
+
+mysql 실행후 
+keepaliveed 실행
+
+systemctl start keepalived.service
+systemctl status keepalived.service
+systemctl stop keepalived.service
+
+

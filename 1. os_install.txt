@@ -1,0 +1,130 @@
+os_install
+virtual_box 
+
+사양
+CPU - dual core
+RAM - 2GB
+DISK - 20GB
+
+Oracle Virtual Box
+Oracle Linux Server Release 8.9
+MysqlServer 8.0.36
+percona xtrabackup 8.0.35
+
+---Template이 될 가상머신 셋팅---
+
+계정 셋팅 
+root / kinam123!@#
+kinam / rlska123!@#
+
+sudo su
+visudo
+kinam  ALL=(ALL) NOPASSWD:ALL
+-->편의상 추가
+
+--mysql 설치 & 계정 셋팅 & 데이터 경로 셋팅 -----
+sudo yum install https://dev.mysql.com/get/mysql80-community-release-el8-9.noarch.rpm
+sudo yum install mysql-server
+
+mkdir /db/
+mkdir /db/mysqldata
+
+
+데이터 이동
+cp -r /var/lib/mysql/* /db/mysqldata
+
+chown -R mysql:mysql /db
+chown -R mysql:mysql /db/mysqldata
+
+semanage fcontext -a -t mysqld_db_t "/db/mysqldata(/.*)?"  	
+restorecon -R /db/mysqldata
+
+sudo vim /etc/sysconfig/selinux 
+SELINUX=disabled
+reboot
+
+********************소켓경로 변경해주기******************
+
+my.cnf수정 
+client
+#socket=/db/mysqldata/mysql.sock
+socket=/db/mysql.sock
+server
+[mysqld]
+server-id = 1 
+
+datadir=/db/mysqldata
+socket=/db/mysqldata/mysql.sock
+log-error=/db/mysqldata/error_log.log
+pid-file=/run/mysqld/mysqld.pid
+
+innodb_data_home_dir = /db/mysqldata
+innodb_log_group_home_dir = /db/mysqldata
+
+log-bin = mysql-bin
+binlog_format = ROW
+max_binlog_size = 500M
+sync_binlog = 1
+expire-logs-days = 7
+
+replicate-ignore-db=mysql
+replicate-ignore-db=information_schema
+replicate-ignore-db=performance_schema
+replicate-ignore-db=sys
+#binlog-ignore-db	= mysql  
+#binlog-ignore-db	= information_schema  
+#binlog-ignore-db	= performance_schema  
+#binlog-ignore-db	= sys
+ 
+계정셋팅
+
+--사용자 계정 생성
+create user 'kinam'@'%' identified by 'rlska123!@#';
+grant all privileges on *.* to 'kinam'@'%'; 
+
+--루트 비밀번호 변경
+alter user 'root'@'localhost' identified with mysql_native_password by 'rlska123!@#';
+
+flush privileges;
+
+--백업용 계정 생성
+ CREATE USER 'xtrabackup'@'%' IDENTIFIED BY '12345';
+ grant all privileges on *.* to 'xtrabackup'@'%';
+flush privileges;
+
+간편접속
+mysql_config_editor set --login-path=kinam --host=localhost --user=root --port=3306 --password
+
+vi ~/.bashrc
+alias qq='mysql --login-path=kinam' << 등록
+
+source ~/.bashrc 동기화
+
+외부접속을 위한 방화벽 설정
+sudo firewall-cmd --zone=public --add-port=3306/tcp --permanent
+sudo firewall-cmd --reload
+sudo firewall-cmd --list-ports
+
+--xtrabackup 설치 ----
+wget https://downloads.percona.com/downloads/Percona-XtraBackup-8.0/Percona-XtraBackup-8.0.35-30/binary/redhat/8/x86_64/percona-xtrabackup-80-8.0.35-30.1.el8.x86_64.rpm
+
+yum localinstall percona-xtrabackup-80-8.0.35-30.1.el8.x86_64.rpm
+
+백업데이터용 디렉토리 생성
+mkdir /db/mysqlbackup
+
+
+
+##########################################################
+기본적인 OS 셋팅 서버가 필요할때마다 복제해서 사용한다.
+*가상머신 복제후 호스트명 변경해주기
+
+sudo hostnamectl set-hostname hosname
+
+###########################
+==파이썬==
+sysstat 설치
+requests 설치
+
+
+

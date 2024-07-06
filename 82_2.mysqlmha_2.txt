@@ -1,0 +1,273 @@
+mysqlmha_2
+
+hostname		ip			 mysql-server-id	report_host
+mha-manager 	220.78.0.131   					
+mha-master 	211.184.32.225	1			mha-master
+mha-slave1 	211.184.32.101	2			mha-slave1
+mha-slave2 	59.11.230.21	3			mha-slave2
+
+VIP                   59.11.230.100   
+
+/etc/hosts 수정
+
+sudo vi /etc/hosts
+
+220.78.0.131    	mha-manager
+211.184.32.225   	mha-master
+211.184.32.101  	mha-slave1
+59.11.230.21   	mha-slave2
+59.11.230.100	mha-vip
+
+
+----펄 설치 및 업데이트----
+sudo yum install perl
+
+----my.cnf 수정 ------
+서버 아이디 수정 및 아래추가
+[mysqld]
+log-bin-trust-function-creators=1
+report_host = host_name
+relay_log_purge = OFF
+
+----------리플리케이션 및 리플리케이션 계정 생성---------------------------------
+mha 계정생성 master,slave 전부. 
+
+--리플리케이션용 계정 생성
+CREATE USER 'mha_repl'@'%' IDENTIFIED BY 'rlska123!@#';
+grant all privileges on *.* to 'mha_repl'@'%';
+flush privileges;
+
+편의상 올권한
+
+슬레이브 서버에서 auto.cnf 삭제
+
+슬레이브 서버에서
+CHANGE REPLICATION SOURCE TO 
+	SOURCE_HOST = '211.184.32.225',
+	SOURCE_PORT = 3306,
+	SOURCE_USER = 'mha_repl',
+	SOURCE_PASSWORD = 'rlska123!@#',
+	SOURCE_LOG_FILE = 'mysql-bin.000022',
+	SOURCE_LOG_POS = 832,
+	GET_SOURCE_PUBLIC_KEY =1;
+
+reset slave;
+start slave;
+show slave status \G;
+
+-------------------------------------------------------------
+mha 계정 생성
+master에서만 생성 ( 슬레이브에 어차피 자동생성되니)
+
+CREATE USER 'mha'@'%' IDENTIFIED BY 'rlska123!@#';
+grant all privileges on *.* to 'mha'@'%';
+flush privileges;
+
+---------------------------------------------------------------------
+
+PATH관련 환경변수들 추가
+/usr/bin -->여기에 mysql 실행파일들 있음
+
+mysql 호스트들에서 실행
+echo "export PATH=$PATH:/usr/local/bin:/usr/bin" >> ~/.bash_profile
+source ~/.bash_profile
+
+
+-----------------------------------------------------------------------------
+ssh키 생성 및 전송
+->모든 서버에서
+ssh-keygen -t rsa -b 4096
+엔터엔터엔터엔터엔터
+
+Your identification has been saved in /home/mha/.ssh/id_rsa.
+Your public key has been saved in /home/mha/.ssh/id_rsa.pub.
+
+su - mha
+
+manager
+ssh-copy-id -i mha-master 
+ssh-copy-id -i mha-slave1 
+ssh-copy-id -i mha-slave2 
+
+master
+ssh-copy-id -i mha-manager
+ssh-copy-id -i mha-slave1 
+ssh-copy-id -i mha-slave2 
+
+slave1
+ssh-copy-id -i mha-manager
+ssh-copy-id -i mha-master 
+ssh-copy-id -i mha-slave2 
+
+slave2
+ssh-copy-id -i mha-manager
+ssh-copy-id -i mha-master 
+ssh-copy-id -i mha-slave1
+
+visudo 
+kinam  ALL=(ALL) NOPASSWD:ALL,NOPASSWD:/sbin/ifconfig
+
+========================================
+
+VIP UP&DOIWN
+VIP                  59.11.230.100   
+220.78.0.131
+
+sudo ifconfig enp0s3:0 59.11.230.100 netmask 255.255.255.0 up
+sudo ifconfig enp0s3:0 down
+
+
+-----------------------------------------------------------------------------------
+MHA MAnager 설치
+
+Manager 서버에서
+wget https://github.com/yoshinorim/mha4mysql-manager/releases/download/v0.58/mha4mysql-manager-0.58.tar.gz
+tar zxvf mha4mysql-manager-0.58.tar.gz
+
+
+cd mha4mysql-manager-0.58
+cpan Module::Install
+perl Makefile.PL
+make
+make install
+
+
+MHA Node 설치
+manager와 mysql 서버에서
+wget https://github.com/yoshinorim/mha4mysql-node/releases/download/v0.58/mha4mysql-node-0.58.tar.gz
+tar zxvf mha4mysql-node-0.58.tar.gz
+
+
+mysql 서버들에서
+sudo - sui h
+
+ln -s /usr/bin/mysql /usr/local/bin/mysql
+
+
+
+========== 필요 디렉토리 생성 및 설정파일 복사
+매니저 서버에서
+mkdir -p /etc/masterha
+mkdir -p /masterha/scripts
+
+cd /home/kinam/mha4mysql-manager-0.58/samples
+cp conf/* /etc/masterha/
+cp scripts/* /masterha/scripts
+
+
+모든서버에서
+mkdir -p /masterha/app1
+
+매니저 서버 파일 설정
+app1.cnf
+chown root:mysql app1.cnf
+chmod 775 app1.cnf
+cp app1.cnf app1.cnf.backup
+
+chown -R kinam:mysql /masterha
+
+----------------------------------------------------
+매니저 서버에서
+
+cp app1.cnf app1.cnf.bak
+chown root:mysql app1.cnf
+chmod 775 app1.cnf
+
+app1.cnf
+mha_app1.cnf.txt 참조
+
+
+
+=====스크립트 수정==============
+매니저서버에서
+
+cd /masterha/scripts
+cp -ar master_ip_failover master_ip_failover.bakup
+vi master_ip_failover
+--------------------------------------------------------------------------------------
+Line 86
+## Creating an app user on the new master
+## print "Creating app user on the new master..n";
+## FIXME_xxx_create_user( $new_master_handler->{dbh} );
+## $new_master_handler->enable_log_bin_local();
+## $new_master_handler->disconnect();
+
+## Update master ip on the catalog database, etc
+## FIXME_xxx;
+
+system("/bin/bash /masterha/scripts/mha_change_vip.sh $new_master_ip");
+--------------------------------------------------------------------------------
+
+cp -ar master_ip_online_change master_ip_online_change.bakup
+ vi master_ip_online_change
+
+Line149
+
+## Drop application user so that nobody can connect. Disabling per-session binlog beforehand
+## $orig_master_handler->disable_log_bin_local();
+## print current_time_us() . " Drpping app user on the orig master..n";
+## FIXME_xxx_drop_app_user($orig_master_handler);
+
+Line244
+## Creating an app user on the new master
+## print current_time_us() . " Creating app user on the new master..n";
+## FIXME_xxx_create_app_user($new_master_handler);
+## $new_master_handler->enable_log_bin_local();
+## $new_master_handler->disconnect();
+
+system("/bin/bash /masterha/scripts/mha_change_vip.sh $new_master_ip");
+$exit_code = 0;
+
+-----------------------------------------------------------------------------------------
+
+cd /masterha/scripts
+vi mha_change_vip.sh
+--------------------------------------------------------------------------------------------------------
+
+#!/bin/bash
+## Fail-Over VIP Change
+V_NEW_MASTER=`cat /etc/hosts | grep $1 | awk '{print $2}'`
+V_EXIST_VIP_CHK=`ping -c 1 -W 1 mha-vip | grep "packet loss" | awk '{print $6}'`
+V_VIP_IP=`cat /etc/hosts | grep mha-vip | awk '{print $1}'`
+if [ $V_EXIST_VIP_CHK = "0%" ]
+then
+    echo "VIP IS Alive, VIP Relocate $V_NEW_MASTER "
+    /bin/ssh -o StrictHostKeyChecking=no mha-vip /bin/sudo /sbin/ifconfig enp0s3:0 down &
+    ssh -o StrictHostKeyChecking=no $V_NEW_MASTER /bin/sudo /sbin/ifconfig enp0s3:0 $V_VIP_IP netmask 255.255.255.0
+    ssh -o StrictHostKeyChecking=no $V_NEW_MASTER /sbin/arping -c 5 -D -I enp0s3 -s $V_VIP_IP $V_VIP_IP
+    VIP_NOHUP_PS=`ps -ef | grep "ifconfig enp0s3:0" | grep ssh | grep -v grep | awk '{print $2}'` && kill -9 $VIP_NOHUP_PS
+elif [ $V_EXIST_VIP_CHK = "100%" ]
+then
+    echo "VIP IS dead, VIP Relocate $V_NEW_MASTER "
+    /bin/ssh -o StrictHostKeyChecking=no $V_NEW_MASTER /bin/sudo /sbin/ifconfig enp0s3:0 $V_VIP_IP netmask 255.255.255.0
+    /bin/ssh -o StrictHostKeyChecking=no $V_NEW_MASTER /sbin/arping -c 5 -D -I enp0s3 -s $V_VIP_IP $V_VIP_IP
+fi
+
+-----------------------------------------------------------------------------------------------
+chmod 755 mha_change_vip.sh
+
+
+
+./mha_change_vip.sh 211.184.32.225
+
+sudo ifconfig enp0s3:0 211.184.33.100 netmask 255.255.255.0 up
+sudo ifconfig enp0s3:0 down
+
+220.78.0.131    	mha-manager
+211.184.32.225   	mha-master
+211.184.32.101  	mha-slave1
+59.11.230.21   	mha-slave2
+59.11.230.100	mha-vip
+
+
+
+
+
+
+
+
+
+
+
+
+

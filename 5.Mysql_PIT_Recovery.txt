@@ -1,0 +1,83 @@
+Binlog PitRecovery
+
+create database sample;
+use sample;
+
+create table sample(
+	id bigint primary key auto_increment,
+	data_str nvarchar(50) not null 
+);
+
+
+INSERT INTO sample(data_str)
+VALUES
+('data_1'),
+('data_2'),
+('data_3'),
+('data_4'),
+('data_5'),
+('data_6');
+
+show binary logs;
++------------------+-----------+-----------+
+| Log_name         | File_size | Encrypted |
++------------------+-----------+-----------+
+| mysql-bin.000031 |       157 | No        |
+| mysql-bin.000032 |       989 | No        |
++------------------+-----------+-----------+
+truncate table sample;
+
+select * from sample;
+mysql> select * from sample;
+Empty set (0.00 sec)
+
+flush logs;
+
+mysql> show binary logs;
++------------------+-----------+-----------+
+| Log_name         | File_size | Encrypted |
++------------------+-----------+-----------+
+| mysql-bin.000031 |       157 | No        |
+| mysql-bin.000032 |      1215 | No        |
+| mysql-bin.000033 |       157 | No        |
++------------------+-----------+-----------+
+3 rows in set (0.00 sec)
+
+
+mysqlbinlog /db/mysqldata/mysql-bin.000031 > bin0031.sql
+mysqlbinlog /db/mysqldata/mysql-bin.000032 > bin0032.sql
+mysqlbinlog /db/mysqldata/mysql-bin.000033 > bin0033.sql
+
+
+bin0032에서 truncate 시간 확인 가능
+해당 부분 주석처리
+
+
+mv bin
+mysql -u root -p -f < recover.sql
+
+
+mysql> select * from sample;
++----+----------+
+| id | data_str |
++----+----------+
+|  1 | data_1   |
+|  2 | data_2   |
+|  3 | data_3   |
+|  4 | data_4   |
+|  5 | data_5   |
+|  6 | data_6   |
++----+----------+
+
+복구 확인
+
+
+
+
+
+
+
+
+
+
+

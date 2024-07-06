@@ -1,0 +1,67 @@
+Mysqldump를 활용한 mysql8 리플리케이션
+
+sudo vi /etc/my.cnf
+각각의 서버에서 id값 확인 및
+slave서버에서의 id값 master와 다르게 수정
+
+--리플리케이션용 계정 생성
+Master서버에 리플리케이션용 계정 생성
+create user 'replica'@'%' identified by 'rlska123!@#';
+grant all privileges on *.* to 'replica'@'%'; 	
+flush privileges;
+-->편의상 올 권한, replication slave 권한만 줘두됨
+
+----마스터 서버에서 데이터 삽입
+create database repl_test;
+use repl_test;
+CREATE TABLE testTable(                               
+  id INT(11) NOT NULL AUTO_INCREMENT,                 
+  name VARCHAR(20) NOT NULL,                                                                       
+  date  DATETIME,                                     
+  CONSTRAINT testTable_PK PRIMARY KEY(id)             
+);
+
+insert into testTable(name,date)
+values('hahaha','2022-10-10');
+insert into testTable(name,date)
+values('호호호','2023-10-10');
+
+---------------------------------------- 백업은 위까지만
+insert into testTable(name,date)
+values('asdfasdf','2023-10-10');
+
+mysqldump를 사용한 백업 및 복제
+mysqldump -u root -p --single-transaction --master-data=2 --opt --routines --triggers --hex-blob --all-databases > master_dump.sql
+
+
+scp로 파일 전송 Master To Slave
+192.168.0.9
+scp /home/kinam/master_dump.sql kinam@192.168.0.9:/home/kinam
+
+Slave에서 dump파일 복원
+mysql -u root -p < /home/kinam/master_dump.sql
+
+bin로그 파일 및 위치 확인
+dump 파일 상단부에서 확인가능
+CHANGE MASTER TO MASTER_LOG_FILE='mysql-bin.000003', MASTER_LOG_POS=2198;
+
+CHANGE REPLICATION SOURCE TO 
+	SOURCE_HOST = '192.168.0.8',
+	SOURCE_PORT = 3306,
+	SOURCE_USER = 'replica',
+	SOURCE_PASSWORD = 'rlska123!@#',
+	SOURCE_LOG_FILE = 'mysql-bin.000003',
+	SOURCE_LOG_POS = 2198,
+	GET_SOURCE_PUBLIC_KEY =1;
+
+start slave;
+show slave status \G;
+stop slave;
+
+slave status 확인 및 마스터에서 dml쿼리 사용후 슬레이브 데이터 확인
+
+=================================
+stop slave;
+SET GLOBAL sql_slave_skip_counter = N
+start slave;
+show slave status \G;

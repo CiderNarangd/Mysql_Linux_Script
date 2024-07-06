@@ -1,0 +1,16 @@
+ssh-keygen
+
+키 생성
+open cmd
+>> ssh-keygen -t rsa
+
+(엔터 연속)
+key복사
+scp C:\Users\ddous/.ssh/id_rsa.pub root@211.184.32.98:~/
+
+mkdir ~/.ssh
+touch /.ssh/authorized_keys
+cat id_rsa.pub >> ~/.ssh/authorized_keys
+chmod 700 ~/.ssh/authorized_keys
+
+kinam@221.163.171.138

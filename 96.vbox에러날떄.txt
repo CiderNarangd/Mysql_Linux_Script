@@ -1,0 +1,3 @@
+sudo dnf install kernel-devel   
+
+호스트 실행시 vbox관련 에러날떄

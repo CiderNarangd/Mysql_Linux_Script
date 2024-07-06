@@ -1,0 +1,78 @@
+Install Prometheus
+Version - 2.52.0
+=====모니터링 구성도======
+Host1 - Prometheus + AlertManager
+Host2 - Grafana
+
+모니터링 대상 Host - Mysqld_Exporter, Node_Exporter 설치
+
+Prometheus를 Pull 방식을 사용하여 모니터링 대상 Host Metrics 수집 
+및 Alert Rule 정의
+
+Alert Manager를 사용하여 AlertRule 조건 넘는 호스트 발생시
+텔레그램으로 메시지 전송
+
+Grafana를 사용하여 모니터링 시각화
+==========================
+
+wget https://github.com/prometheus/prometheus/releases/download/v2.52.0/prometheus-2.52.0.linux-amd64.tar.gz
+tar xzvf prometheus-2.52.0.linux-amd64.tar.gz
+
+프로메테우스 디렉토리명 변경 및 디렉토리 위치 이동
+
+mv prometheus-2.52.0.linux-amd64.tar.gz prometheus
+mv prometheus /prometheus
+
+방화벽 해제
+firewall-cmd --permanent --zone=public --add-port=9090/tcp
+firewall-cmd --reload
+firewall-cmd --list-all
+**프로메테우스 default Port - 9090
+
+systemctl 등록
+vi /etc/systemd/system/prometheus.service
+->User명, 경로 등 확인
+--------------------------------------------------------------
+
+[Unit]
+Description=Prometheus Server
+Documentation=https://prometheus.io/docs/introduction/overview/
+After=network-online.target
+
+[Service]
+User=kinam
+Restart=on-failure
+ExecStart=/prometheus/prometheus \
+  --config.file=/prometheus/prometheus.yml \
+  --storage.tsdb.path=/prometheus/data
+
+[Install]
+WantedBy=multi-user.target
+
+-------------------------------------------------------
+
+데몬 재시작 및 프로메테우스 실행
+sudo systemctl daemon-reload
+sudo systemctl start prometheus
+sudo systemctl status prometheus
+sudo systemctl stop prometheus
+
+
+
+vi prometheus.yml -> prometheus.yml 참조
+global -> interval 타임 수정
+alerting  -> alertmanager 등록 	(alert_manager 설치후)
+rule_files: -> alert_rule.yml 등록
+scrape_configs :
+ job 및 target 설정 및 그에 대한 라벨지정
+
+PrometheusHostIP:9090 에서 콘솔 접속 가능
+- PromQL을 사용한 쿼리 테스트 및 등록된 Alerts 및 Target, Rules 등의 상태 GUI로  확인가능
+==============================
+*sudo vi /etc/resolv.conf
+nameserver 8.8.8.8 추가
+--> wget으로 다운로드 안될시 추가.
+
+*SELINUX 해제
+vi /etc/sysconfig/selinux
+SELINUX=disabled 

@@ -1,0 +1,75 @@
+=======xtrabackup설치=======
+
+xtrabckup 백업 데이터 경로 생성
+mkdir /db/mysqlbackup
+
+===디렉토리 권한 세팅
+chown -R mysql:mysql /db/mysqlbackup
+
+===rpm파일 다운로드 및 설치
+wget https://downloads.percona.com/downloads/Percona-XtraBackup-8.0/Percona-XtraBackup-8.0.35-30/binary/redhat/8/x86_64/percona-xtrabackup-80-8.0.35-30.1.el8.x86_64.rpm
+-rw-rw-r--. 1 kinam kinam 44934352 Nov 30 02:52 percona-xtrabackup-80-8.0.35-30.1.el8.x86_64.rpm
+yum localinstall percona-xtrabackup-80-8.0.35-30.1.el8.x86_64.rpm
+
+* 기본적으로 xtrabackup과 mysql간의 버전이 동일하게 셋팅하는것이 권장되나, 
+ xtrbackup이 8.0.35까지밖에 업데이트 되지 않았음. 사용하는데 크게 지장되는 부분발견x
+
+===mysql xtrabackup용 계정 생성 및 권한 세팅
+--xtrabackup을 사용하기 위한 최소한의 권한
+
+ CREATE USER 'xtrabackup'@'%' IDENTIFIED BY 'rlska123!@#';
+GRANT BACKUP_ADMIN, PROCESS, RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'xtrabackup'@'localhost';
+ GRANT SELECT ON performance_schema.log_status TO 'xtrabackup'@'localhost';
+ GRANT SELECT ON performance_schema.keyring_component_status TO xtrabackup@'localhost';
+ GRANT SELECT ON performance_schema.replication_group_members TO xtrabackup@'localhost';
+ FLUSH PRIVILEGES;
+
+--편의상 올권한.
+ CREATE USER 'xtrabackup'@'%' IDENTIFIED BY '12345';
+ grant all privileges on *.* to 'xtrabackup'@'%';
+flush privileges;
+
+##DROP USER 'xtrabackup'@'%' 
+
+----------Xtrabackup을 사용한 풀백업 및 복구
+*{인자값}
+sudo xtrabackup --defaults-file={mycnf} --user=xtrabackup --password='12345' --target-dir=/db/mysqlbackup/{backup_date_str} --backup --no-lock
+-->풀백업
+sudo xtrabackup --prepare --target-dir={target_dir}{backup_date_str}
+-->리두로그 적용
+
+--복구
+systemctl stop mysqld
+->mysql종료 ( 슬레이브 서버라면 리플리케이션 스탑이후 종료)
+
+mv /db/mysqldata /db/mysqldata_old
+mkdir /db/mysqldata
+chown -R mysql:mysql /db/mysqldata
+-> 기존 데이터 디렉토리 백업 (삭제해도 무방하나 만일의 사태 대비)
+-> 새로운 데이터 디렉토리 생성 및 권한 수정
+
+xtrabackup --copy-back --target-dir=/db/mysqlbackup/fullbackup
+-> 복구 명령어 실행
+
+chown -R mysql:mysql /db/mysqldata/*
+-> 복구가 성공했다면 데이터 디렉토리내에 파일들 권한 수정
+
+systemctl start mysqld
+-> mysql 실행
+
+=============================
+로그파일 권한문제가 발생하면 해당 로그파일 경로 및 권한 재확인
+그래도 안되면 selinux 체크 후 켜져있으면 비활성화
+
+
+
+
+
+
+
+
+
+
+
+
+

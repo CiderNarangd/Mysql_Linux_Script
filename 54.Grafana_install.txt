@@ -1,0 +1,24 @@
+Install Grafana
+Version - 10.4.3
+DefaultPort - 3000
+--------------------------------------
+Install 
+sudo yum install -y https://dl.grafana.com/oss/release/grafana-10.4.3-1.x86_64.rpm
+
+방화벽 해제
+firewall-cmd --permanent --zone=public --add-port=3000/tcp
+firewall-cmd --reload
+firewall-cmd --list-all
+
+그라파나 실행
+systemctl enable grafana-server.service
+systemctl start grafana-server.service
+systemctl stop grafana-server.service
+systemctl restart grafana-server.service
+
+GrafanaHostIP:3000
+콘솔 접속 가능해서 모니터링 대시보드 생성 및 시각화 가능
+
+첫접속시
+admin//admin 
+비밀번호 변경 필요.

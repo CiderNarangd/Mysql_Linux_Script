@@ -1,0 +1,23 @@
+xtrabackup incremental backup
+
+*{인자값}
+
+--1차 증분백업
+sudo xtrabackup --defaults-file=/etc/my.cnf --user=xtrabackup --password='12345' --target-dir=/db/mysqlbackup/inc1_{backup_date_str} --incremental-basedir=/db/mysqlbackup/{backup_date_str} --backup
+
+--2차 증분백업
+sudo xtrabackup --defaults-file=/etc/my.cnf --user=xtrabackup --password='12345' --target-dir=/db/mysqlbackup/inc2_{backup_date_str} --incremental-basedir=/db/mysqlbackup/{backup_date_str} --backup
+
+--풀백업 복구준비
+sudo xtrabackup --prepare --apply-log-only --target-dir=/db/mysqlbackup/{backup_date_str}
+
+--1차 증분백업 적용
+sudo xtrabackup --prepare --apply-log-only --target-dir=/db/mysqlbackup/{backup_date_str}
+ --incremental-dir=/db/mysqlbackup/inc1_{backup_date_str}
+
+2차 증분백업 적용
+sudo xtrabackup --prepare --apply-log-only --target-dir=/db/mysqlbackup/full --incremental-dir=/db/mysqlbackup/inc2_{backup_date_str}
+
+--최종백업 준비
+sudo xtrabackup --prepare --target-dir=/db/mysqlbackup/{backup_date_str}
+

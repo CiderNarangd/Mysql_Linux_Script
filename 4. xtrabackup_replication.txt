@@ -1,0 +1,139 @@
+Xtrabackup을 활용한 Mysql 백업 및 복구, 리플리케이션
+
+Master,Slave
+sudo vim /etc/my.cnf.d/mysql-server~.cnf
+
+master, slave 서버 my.cnf 확인 및 수정
+slave서버에 server-id master서버와 다르게 설정
+
+변경후 mysql 재시작
+systemctl mysqld stop
+systemctl mysqld start
+
+----리플리케이션용 계정 생성 & 테스트 데이터 삽입-----
+In Master
+create user 'replica'@'%' identified by 'rlska123!@#';
+grant all privileges on *.* to 'replica'@'%'; 	
+flush privileges;
+-->편의상 올 권한, replication slave 권한만 추가하면 된다.
+
+
+In Master...
+----데이터 삽입
+create database repl_test;
+use repl_test;
+
+CREATE TABLE testTable(                               
+  id INT(11) NOT NULL AUTO_INCREMENT,                 
+  name VARCHAR(20) NOT NULL,                                                                       
+  date  DATETIME,                                     
+  CONSTRAINT testTable_PK PRIMARY KEY(id)             
+);
+
+insert into testTable(name,date)
+values('hahah2222222222a','2022-10-10');
+insert into testTable(name,date)
+values('호호호','2023-10-10');
+insert into testTable(name,date)
+values('rarara','2023-10-10');
+
+
+sudo xtrabackup --defaults-file=/etc/my.cnf --user=xtrabackup --password='12345' --target-dir=/db/mysqlbackup/{backup_date_str} --backup --no-lock
+->full backup
+sudo xtrabackup --prepare --target-dir=/db/mysqlbackup/{backup_date_str}
+->apply-log
+
+Master--> Slave 백업 데이터 전송
+sudo scp -r {backup_dir} {slave_user}@{slave_host}:{slave_backup_dir}
+
+In Slave...
+mv /db/mysqldata /db/mysqldata_old
+->기존 데이터 디렉토리 백업(삭제해도 상관없으나 만일의 사태 대비)
+
+mkdir /db/mysqldata
+chown -R mysql:mysql /db/mysqldata
+->복구를 위해 mysqldata 디렉토리 생성 및 그룹 권한 수정
+
+sudo xtrabackup --copy-back --target-dir=/db/mysqlbackup/{backup_dir}
+-> copy back옵션을 사용해 복구, 호스트 용량이 부족하다면 move back옵션 사용
+
+복구 성공시 mysqldata 디렉토리와 내부 파일 권한 수정
+chown -R mysql:mysql /db/mysqldata
+sudo chmod -R 777 /db/mysqldata
+
+systemctl start mysqld
+-> DB 실행 후 작동 확인 및 데이터 확인
+
+===리플리케이션 적용
+In Slave
+cat /db/mysqldata/xtrabackup_info
+-> 리플리케이션 연결을 위해 백업 디렉토리 내에 xtrabackup_info 파일 확인
+
+uuid = 467d4f23-1205-11ef-bb02-080027e29242
+name = 
+tool_name = xtrabackup
+tool_command = --defaults-file=/etc/my.cnf --user=xtrabackup --password=... --backup --no-version-check --target-dir=/db/mysqlbackup/240515 --datadir=/db/mysqldata
+tool_version = 8.0.35-30
+ibbackup_version = 8.0.35-30
+server_version = 8.0.36
+start_time = 2024-05-15 00:18:51
+end_time = 2024-05-15 00:18:53
+lock_time = 0
+binlog_pos = filename 'mysql-bin.000004', position '157'
+innodb_from_lsn = 0
+innodb_to_lsn = 20604854
+partial = N
+incremental = N
+format = file
+compressed = N
+encrypted = N
+
+-----> binlog_pos 항목 확인
+
+CHANGE REPLICATION SOURCE TO 
+	SOURCE_HOST = '175.214.6.138',
+	SOURCE_PORT = 3306,
+	SOURCE_USER = 'replica',
+	SOURCE_PASSWORD = 'rlska123!@#',
+	SOURCE_LOG_FILE = 'mysql-bin.000004',
+	SOURCE_LOG_POS = 157,
+	GET_SOURCE_PUBLIC_KEY =1;
+
+start slave;
+show slave status \G;
+stop slave;
+set global sql_slave_skip_counter=1;
+
+리플리케이션 연결 후 상태 확인 및 마스터에서 DML 날리기
+
+====================================================
+Could not open file '/db/mysqldata/error_log.log' for error logging: Permission denied
+-- >
+touch error_log.log 
+생성후 권한 수정 
+
+그래도 안될시 selinux 상태 확인 후 해제
+vim /etc/sysconfig/selinux 
+
+chown -R mysql:mysql /db/mysqldata
+sudo chmod -R 777 /db/mysqldata
+sudo chown -R mysql:mysql /db/mysqldata/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

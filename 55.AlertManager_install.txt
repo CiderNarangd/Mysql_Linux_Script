@@ -1,0 +1,43 @@
+Install Alert Manager
+Version - 0.27.0
+DefaultPort - 9093
+=======================================================
+규모가 작은 인프라이기 때문에 프로메테우스 서버와 같은 서버의 설치
+
+다운로드 및 압축해제
+wget https://github.com/prometheus/alertmanager/releases/download/v0.27.0/alertmanager-0.27.0.linux-amd64.tar.gz
+tar -xvf alertmanager-0.27.0.linux-amd64.tar.gz
+
+디렉토리 몇 변경 및 디렉토리 이동
+mv alertmanager-0.27.0.linux-amd64 alert_manager
+mv alert_manager /alert_manager 
+
+alert_manager 서비스 추가
+sudo vi /etc/systemd/system/alert_manager.service 
+Service 항목에서 User, ExecStart 경로 확인
+================================================
+
+[Unit]
+Description=Prometheus Alertmanager Service
+After=network.target
+
+[Service]
+User=kinam
+Type=simple
+ExecStart=/alert_manager/alertmanager --config.file /alert_manager/alertmanager.yml --storage.path /alert_manager/data
+
+[Install]
+WantedBy=multi-user.target
+
+=====================================================
+
+sudo systemctl daemon-reload
+sudo systemctl start alert_manager
+sudo systemctl status alert_manager
+sudo systemctl stop alert_manager
+
+방화벽 해제
+firewall-cmd --permanent --zone=public --add-port=9093/tcp
+firewall-cmd --reload
+firewall-cmd --list-all
+

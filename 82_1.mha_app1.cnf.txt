@@ -1,0 +1,35 @@
+[server default]
+# user&password is DB User
+user=mha
+password=rlska123!@#
+
+# ssh_user is OS User
+ssh_user=mha
+
+# repl_user&repl_password is DB User
+repl_user=mha_repl
+repl_password=rlska123!@#
+
+manager_workdir=/masterha/app1
+manager_log=/masterha/app1/app1.log
+
+remote_workdir=/masterha/app1
+master_binlog_dir=/db/mysqldata
+
+secondary_check_script=/usr/local/bin/masterha_secondary_check -s mha-slave1 -s mha-slave2 --user=mha --master_host=mha-master --master_ip=mha-master --master_port=3306
+# --user=mha is os ssh user
+master_ip_failover_script=/masterha/scripts/master_ip_failover
+master_ip_online_change_script=/masterha/scripts/master_ip_online_change
+
+[server1]
+hostname=mha-master
+candidate_master=1
+
+[server2]
+hostname=mha-slave1
+candidate_master=1
+
+[server3]
+hostname=mha-slave2
+candidate_master=1
+           

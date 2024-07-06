@@ -1,0 +1,27 @@
+
+
+vi ~/.bashrc
+
+alias qq='mysql --login-path=kinam' 
+alias dbstart='service mysqld start'
+alias dbstop='service mysqld stop'
+alias dbstatus='service mysqld status'
+alias mycnf='sudo vi /etc/my.cnf.d/mysql-server.cnf'
+alias nestart='service node_exporter start'
+alias nestop='service node_exporter stop'
+alias nestatus='service node_exporter status'
+alias mestart='service mysqld_exporter start'
+alias mestop='service mysqld_exporter stop'
+alias mestatus='service mysqld_exporter status'
+alias pmstart='service prometheus start'
+alias pmstop='service prometheus stop'
+alias pmstatus='service prometheus status'
+alias amstart='service alert_manager start'
+alias amstop='service alert_manager stop'
+alias amstatus='service alert_manager status'
+alias gfstart='service grafana-server start'
+alias gfstop='service grafana-server stop'
+alias gfstatus='service grafana-server status'
+
+source ~/.bashrc 동기화
+source ~/.bashrc

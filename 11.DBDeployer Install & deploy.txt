@@ -1,0 +1,105 @@
+DBDeployer Install & deploy
+
+version 1.73.0
+
+
+wget https://github.com/datacharmer/dbdeployer/releases/download/v1.73.0/dbdeployer-1.73.0.linux.tar.gz
+tar -xvf dbdeployer-1.73.0.linux.tar.gz
+
+사용할 mysql 버전 바이너리 다운로드
+wget https://dev.mysql.com/get/Downloads/MySQL-8.0/mysql-8.0.36-linux-glibc2.12-x86_64.tar.xz
+
+압축해제 
+tar -xvf mysql-8.0.36-linux-glibc2.12-x86_64.tar.xz
+
+디렉토리명 변경 및 경로이동
+mv mysql-8.0.36-linux-glibc2.12-x86_64 8.0.36 
+mv 8.0.36 ~/opt/mysql/
+
+OR unpack명령어 활용해서 압축해제
+
+./dbdeployer unpack mysql-8.0.4-rc-linux-glibc2.12-x86_64.tar.gz
+
+싱글 인스턴스 배포
+./dbdeployer deploy single 8.0.36 --sandbox-directory=mysql-master --port=3307
+./dbdeployer deploy single 8.0.36 --sandbox-directory=other-dbhost --port=3308
+						.
+						.
+						.
+
+----------------------------------------------------------------------------------------------
+**libncurse관련 에러 발생시 -> 최신버전인 6이 설치되어있어서 에러 발생시
+					   에러발생 파일 링크 이어줌.								
+ex)
+sudo ln -s /usr/lib64/libtinfo.so.6.1 /usr/lib64/libtinfo.so.5
+
+------------------------------------------------------------------------------------------------
+실행 및 정지
+~/sandboxes/mysql_master/use
+~/sandboxes/mysql_master/start
+~/sandboxes/mysql_master/status
+~/sandboxes/mysql_master/stop
+
+Database 접속
+
+~/sandboxes/mysql_master/use
+
+or 
+
+바이너리 설치된 디렉토리에 mysql 파일에서
+./mysql -u root -p --host=127.0.0.1 --port=3307
+or
+~/opt/mysql/8.0.36/bin/mysql -u root -p --host=127.0.0.1 --port=3307
+
+===========================================
+Xtrabackup 백업을 활용해 dbdeployer 인스턴스에 복구
+
+복구하고자 하는 인스턴스 중지
+~/sandboxes/mysql_master/stop
+
+기존 데이터 백업
+mv ~/sandboxes/mysql_master/data ~/sandboxes/mysql_master/data_bak
+
+엑스트라 백업본 copy or move
+cp -r /db/mysqlbackup/{backup_date} ~/sandboxes/mysql_master2/data
+
+~/sandboxes/mysql_master/start
+
+접속후 데이터 확인. 
+계정은 백업본에 들어가 있는 계정이므로 접속은 해당 바이너리 디렉토리에 mysql파일을 이용해서 들어간다.
+~/opt/mysql/8.0.36/bin/mysql -u root -p --host=127.0.0.1 --port=3307
+
+**실행 안될시 데이터 디렉토리 권한 확인
+**백업 디렉토리에 심볼릭 링크로 이어주면 흐음.. 백업본 손상..  but 원본백업본은 해당 호스트에 보존되고 있긴하다.
+===============================================
+싱글 인스턴스로 여러개 배포시 두개의 인스턴스 못킴;
+
+node-default값은 3개
+
+./dbdeployer deploy multiple 8.0.36 --sandbox-directory=mysql-master --nodes=5 --force
+
+수동으로 노드를 추가하거나 node갯수 추가해서 재배포
+-->너무 번거로움
+
+node명 변경시 실행관련 스크립트들 전부 수정 필요.
+
+--force 덮어쓰기
+
+-------------------------------------------------------------------------------------
+바이너리와 인스턴스 1:1 관계 --> 편하긴 하나 불필요한 바이너리 용량먹음
+
+멀티플 인스턴스 배포 --> 관리가 불편.
+
+바이너리 n: 인스턴스m --> 관리포인트가 많다.
+
+테스트 환경이니 싱글인스턴스로 배포하고 테스트 필요시 해당 호스트 껐다켯다 하는 방향으로
+
+인스턴스에 데이터 디렉토리는 일단 백업 디렉토리에 심볼릭링크 하는 방식으로.
+
+mysql --host=127.0.0.1 --port=22908 -u root -p
+
+
+
+
+
+

@@ -1,0 +1,29 @@
+[mysqld]
+server-id = 1 
+
+datadir=/db/mysqldata
+socket=/db/mysqldata/mysql.sock
+log-error=/db/mysqldata/error_log.log
+pid-file=/run/mysqld/mysqld.pid
+
+innodb_data_home_dir = /db/mysqldata
+innodb_log_group_home_dir = /db/mysqldata
+
+log-bin = mysql-bin
+binlog_format = ROW
+max_binlog_size = 500M
+sync_binlog = 1
+expire-logs-days = 7
+
+replicate-ignore-db=mysql
+replicate-ignore-db=information_schema
+replicate-ignore-db=performance_schema
+replicate-ignore-db=sys
+#binlog-ignore-db	= mysql  
+#binlog-ignore-db	= information_schema  
+#binlog-ignore-db	= performance_schema  
+#binlog-ignore-db	= sys
+
+lower_case_table_names = 1
+
+
