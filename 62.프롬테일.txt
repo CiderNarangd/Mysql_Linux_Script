@@ -1,0 +1,106 @@
+Promtail Agent Install
+
+로그 수집하고자 할 서버에 설치
+
+Mysql Server대상
+
+Mysql Server 로그수집
+ - 슬로우쿼리,
+ - 에러로그
+ - General Log(Optional)
+ 
+ 
+ --슬로우쿼리 작동
+ show global variables like '%slow%'
++-----------------------------+--------------------------+
+| Variable_name               | Value                    |
++-----------------------------+--------------------------+
+| log_slow_admin_statements   | OFF                      |
+| log_slow_extra              | OFF                      |
+| log_slow_replica_statements | OFF                      |
+| log_slow_slave_statements   | OFF                      |
+| slow_launch_time            | 2                        |
+| slow_query_log              | OFF                      |
+| slow_query_log_file         | /data/localhost-slow.log |
++-----------------------------+--------------------------+
+
+vi /etc/my.cnf
+
+[mysqld]
+slow_query_log = 1 
+slow_query_log_file = /data/slowquery.log
+long_query_time = 2
+
+ 
+프롬테일 다운로드
+wget https://github.com/grafana/loki/releases/download/v3.3.2/promtail-linux-amd64.zip 
+
+default config 다운로드
+wget https://raw.githubusercontent.com/grafana/loki/main/clients/cmd/promtail/promtail-local-config.yaml 
+unzip promtail-linux-amd64.zip
+
+ln -s /storage/download/promtail-linux-amd64 promtail
+ln -s /storage/download/loki-local-config.yaml /etc/promtail_config.yaml
+
+cd /etc/
+cp /storage/download/promtail-local-config.yaml promtail_config.yaml
+
+/etc/loki_config.yaml
+
+실행 확인
+./promtail -config.file /etc/promtail_config.yaml &
+
+systemctl 등록
+
+vi /etc/systemd/system/promtail.service
+--------------------------------------------------------------
+
+[Unit]
+Description=Promtail
+After=network-online.target
+
+[Service]
+User=root
+Restart=on-failure
+ExecStart=/usr/local/bin/promtail -config.file /etc/promtail_config.yaml
+
+[Install]
+WantedBy=multi-user.target
+
+-------------------------------------------------------
+
+데몬 재시작 및 로키 실행
+systemctl daemon-reload
+systemctl enable promtail
+systemctl start promtail
+systemctl status promtail
+systemctl stop promtail
+
+방화벽 해제
+firewall-cmd --permanent --zone=public --add-port=9080/tcp
+firewall-cmd --reload
+firewall-cmd --list-all
+**Promtail default Port - 9080
+
+
+
+로그로테이트(optional)
+
+vi /etc/logrotate.d/mysql
+================================================
+/data/*.log {
+    daily                     
+    rotate 10                  
+    missingok                 
+    compress                  
+    delaycompress             
+    notifempty                
+    create 640 mysql mysql    
+    postrotate
+        command
+    endscript
+}
+================================================
+
+crotab 등록
+0 2 * * * /usr/sbin/logrotate /etc/logrotate.d/mysql

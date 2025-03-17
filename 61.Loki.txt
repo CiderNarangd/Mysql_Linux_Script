@@ -1,0 +1,77 @@
+Loki & Loglci
+Version - Loki 3.3.2 
+
+Mysql ErrorLog, SlowQueryLog
+(optional)general log -> plugin 설치 필요
+
+로키 다운로드
+wget https://github.com/grafana/loki/releases/download/v3.3.2/loki-linux-amd64.zip
+
+-rw-r--r-- 1 root root  31211233 Dec 19 03:15 loki-linux-amd64.zip
+drwxr-xr-x 9 root root       129 Jan 17 20:09 mysql-8.4.3-linux-glibc2.28-x86_64
+-rw-r--r-- 1 root root 908299408 Sep 18 22:31 mysql-8.4.3-linux-glibc2.28-x86_64.tar.xz
+
+unzip loki-linux-amd64.zip
+
+cd /usr/local/bin
+ln -s /storage/download/loki-linux-amd64 loki
+loki -> /storage/download/loki-linux-amd64
+
+wget https://raw.githubusercontent.com/grafana/loki/main/cmd/loki/loki-local-config.yaml
+--> loki 기본 설정 파일 다운로드
+
+ln -s /storage/download/loki-local-config.yaml /etc/loki_config.yaml
+loki설정 파일 - /etc/loki_config.yaml
+
+
+실행 확인
+cd /usr/local/bin
+nohup ./loki -config.file /etc/loki_config.yaml &
+
+systemctl 등록
+
+vi /etc/systemd/system/loki.service
+--------------------------------------------------------------
+
+[Unit]
+Description=Loki
+After=network-online.target
+
+[Service]
+User=root
+Restart=on-failure
+ExecStart=/usr/local/bin/loki -config.file /etc/loki_config.yaml
+
+[Install]
+WantedBy=multi-user.target
+
+-------------------------------------------------------
+
+데몬 재시작 및 로키 실행
+systemctl daemon-reload
+systemctl enable loki
+systemctl start loki
+systemctl status loki
+systemctl stop loki
+
+방화벽 해제
+firewall-cmd --permanent --zone=public --add-port=3100/tcp
+firewall-cmd --reload
+firewall-cmd --list-all
+**Loki default Port - 3100
+
+
+LogCli Install
+
+cd /storage/download
+
+wget https://github.com/grafana/loki/releases/download/v3.3.2/logcli-linux-amd64.zip
+unzip logcli-linux-amd64.zip
+
+cd /usr/local/bin
+ln -s /storage/download/logcli-linux-amd64 logcli
+
+
+./logcli query '{job="mysql-error-log"}' | grep "SELECT"
+
+./logcli query '{job="mysql-slow-query"}'

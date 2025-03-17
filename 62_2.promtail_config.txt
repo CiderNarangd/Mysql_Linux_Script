@@ -1,0 +1,31 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://211.51.77.127:3100/loki/api/v1/push
+
+scrape_configs:
+- job_name: mysql-slow-query
+  static_configs:
+  - targets:
+      - localhost
+    labels:
+      job: mysql-slow-query
+      __path__: /data/slowquery.log
+      stream: stdout
+	  
+- job_name: mysql-error-log
+  static_configs:
+  - targets:
+      - localhost
+    labels:
+      job: mysql-error-log
+      __path__: /data/error.log
+      stream: stdout
+	  
+	  
+	 
