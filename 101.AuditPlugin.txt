@@ -1,0 +1,464 @@
+=================== Mysql(Maria) Audit Plugin=========================
+ - Mysql Community Edition Audit Plugin 존재 X
+   -> Mysql EnterPrise Edition 에만 Audit Plugin 내장
+ - MariaDB는 Audit Plugin 내장
+ - 현재 AuditLog General Log를 활성화/비활성화 하는 방법으로 AuditLog 수집중
+   * GeneralLog -> Disk I/O, DISK Size 증가, CPU 사용량 증가, 응답시간 증가 등 별로임
+ - Mysql 기반인 Percona Server, MariaDB의 Audit Plugin을 Mysql Community Edition에서 사용 가능.
+  -> MariaDB Audit Plugin Mysql 설치 시도하였으나 에러 발생, Percona Server Audit 채택
+  -> MariaDB를 사용하고 있는 서버들은 MariaDB Audit Plugin 사용
+  -> RDS Mysql 은 Mariadb 플러그인 사용가능
+  -> Aurora mysql은 파라미터 그룹에서 지정가능
+
+==== Percona Server Install ===
+sudo yum install -y https://repo.percona.com/yum/percona-release-latest.noarch.rpm
+sudo percona-release setup ps80
+
+yum install -y percona-icu-data-files percona-server-client percona-server-shared percona-telemetry-agent
+
+--Error 로그에서 root 패스워드 확인
+4-11-25T08:47:29.689556Z 6 [Note] [MY-010454] [Server] A temporary password is generated for root@localhost: odT_3<Hhnrd+
+odT_3<Hhnrd+
+
+alter user 'root'@'localhost' identified by 'password';
+
+--> Audit Plugin만 필요한 부분이기에 yum으로 설치
+
+mysql> select @@version;
++-----------+
+| @@version |
++-----------+
+| 8.0.39-30 |
++-----------+
+1 row in set (0.00 sec)
+
+
+
+
+--> plugin 디렉토리 확인 
+mysql> show global variables like '%plugin%'
+    -> ;
++-----------------------------------------------+--------------------------+
+| Variable_name                                 | Value                    |
++-----------------------------------------------+--------------------------+
+| default_authentication_plugin                 | caching_sha2_password    |
+| plugin_dir                                    | /usr/lib64/mysql/plugin/ |
+| replication_optimize_for_static_plugin_config | OFF                      |
++-----------------------------------------------+--------------------------+
+
+
+cd /usr/lib64/mysql/plugin/
+[joy-dba@vbox plugin]$ ll | grep audit
+-rwxr-xr-x 1 root root   82856  9월 27 00:38 audit_log.so
+-rwxr-xr-x 1 root root  925096  9월 27 00:38 audit_log_filter.so
+-rwxr-xr-x 1 root root   20664  9월 27 00:38 component_audit_api_message_emit.so
+-rwxr-xr-x 1 root root   15680  9월 27 00:38 component_test_audit_api_message.so
+
+--> audit_log.so 플러그인 파일 복사
+
+
+
+--> 플러그인 설치
+
+mysql> select * 
+from information_schema.PLUGINS 
+where PLUGIN_NAME like '%audit%'
+    -> ;
+Empty set (0.00 sec)
+
+INSTALL PLUGIN audit_log SONAME 'audit_log.so';
+
+
+===== MYSQL Server Install ========
+* Percona Mysql 아님
+
+
+-- mysql user&group 추가--
+groupadd mysql
+useradd -r -g mysql mysql
+
+--데이터 디렉토리 생성 권한 셋팅
+mkdir /data
+chown -R mysql:mysql /data
+
+-- my.cnf 생성
+touch /etc/my.cnf
+vi /etc/my.cnf
+----------------------------------------
+[mysqld]
+datadir=(mysql 데이터경로)
+socket=/var/lib/mysql/mysql.sock
+
+[mysqld_safe]
+log_error=/var/log/mysql/error.log
+pid-file=/var/run/mysql/mysql.pid
+
+-----------------------------------------
+-> 테스트 용이니 간단하게만 세팅
+
+
+--종속성 설치
+yum install openssl-devel
+
+/usr/local/mysql/bin/mysqld --initialize-insecure --user=mysql --basedir=/usr/local/mysql --datadir=/data
+
+
+mkdir -p /var/lib/mysql
+mkdir -p /var/log/mysql
+mkdir -p /var/run/mysql
+
+chown mysql:mysql /var/lib/mysql
+chmod 755 /var/lib/mysql
+
+chown mysql:mysql /var/log/mysql
+chmod 755 /var/log/mysql
+
+chown mysql:mysql /var/run/mysql
+chmod 755 /var/run/mysql
+
+
+-- mysql daemon 백그라운드 실행
+/usr/local/mysql/bin/mysqld_safe --defaults-file=/etc/my.cnf --user=mysql &
+
+/mysql -u root -p --socket=/tmp/mysql.sock
+/mysql -u root -p --socket=/var/lib/mysql/mysql.sock
+
+종료
+./mysqladmin -u root -p --socket=/var/lib/mysql/mysql.sock shutdown
+
+
+--비밀번호 변경
+alter user 'root'@'localhost' identified by 'whd315243**A';
+flush privileges;
+
+
+--플러그인 리스트 확인
+mysql> show global variables like '%plugin%';
++-----------------------------------------------+------------------------------+
+| Variable_name                                 | Value                        |
++-----------------------------------------------+------------------------------+
+| default_authentication_plugin                 | caching_sha2_password        |
+| plugin_dir                                    | /usr/local/mysql/lib/plugin/ |
+| replication_optimize_for_static_plugin_config | OFF                          |
++-----------------------------------------------+------------------------------+
+3 rows in set (0.00 sec)
+
+
+-- percona 서버에서 복사해온 audit_log.so 파일 mysql 서버에 /usr/local/mysql/lib/plugin/ 디렉토리로 복사
+INSTALL PLUGIN audit_log SONAME 'audit_log.so';
+
+[root@vbox sf_gongyoou]# cp audit_log.so /usr/local/mysql/lib/plugin/
+[root@vbox sf_gongyoou]# cd /usr/local/mysql/lib/plugin/
+
+-- audit_log plugin 설치
+mysql> INSTALL PLUGIN audit_log SONAME 'audit_log.so';
+ERROR 1126 (HY000): Can't open shared library '/usr/local/mysql/lib/plugin/audit_log.so' (errno: 11 /usr/local/mysql/lib/plugin/audit_log.so: cannot open shared object file: Permission denied)
+->권한부여함 chown mysql:mysql audit_log.so
+
+mysql> INSTALL PLUGIN audit_log SONAME 'audit_log.so';
+Query OK, 0 rows affected (0.00 sec)
+
+
+--> audit_log plugin 설치 확인
+mysql> select * 
+    -> from information_schema.PLUGINS 
+    -> where PLUGIN_NAME like '%audit%'\G
+*************************** 1. row ***************************
+           PLUGIN_NAME: audit_log
+        PLUGIN_VERSION: 0.2
+         PLUGIN_STATUS: ACTIVE
+           PLUGIN_TYPE: AUDIT
+   PLUGIN_TYPE_VERSION: 4.1
+        PLUGIN_LIBRARY: audit_log.so
+PLUGIN_LIBRARY_VERSION: 1.11
+         PLUGIN_AUTHOR: Percona LLC and/or its affiliates.
+    PLUGIN_DESCRIPTION: Audit log
+        PLUGIN_LICENSE: GPL
+           LOAD_OPTION: ON
+1 row in set (0.00 sec)
+
+
+--> audit log plugin 변수 확인
+mysql> show variables like 'audit%';
++-----------------------------+---------------+
+| Variable_name               | Value         |
++-----------------------------+---------------+
+| audit_log_buffer_size       | 1048576       |	-> 로깅 데이터를 저장하기 위해 사용되는 Memory buffer size, Defulat-1Mb
+| audit_log_exclude_accounts  |               | -> 로깅에서 제외할 사용자 계정, 쉼표로 구분하여 지정
+| audit_log_exclude_commands  |               | -> 로깅에서 제외할 쿼리문
+| audit_log_exclude_databases |               | -> 로깅에서 제외할 데이터베이스
+| audit_log_file              | audit.log     | -> 감사로그가 저장될 데이터베이스 경로, 절대 경로를 지정하지 않으면 데이터 디렉토리가 기본 경로
+| audit_log_flush             | OFF           | -> 로그 데이터를 즉시 디스크에 기록할지 여부
+| audit_log_format            | OLD           | -> 감사 로그 저장 포맷, Default OLD(XML), allow_value :OLD, NEW(xml), CSV, JSON
+| audit_log_handler           | FILE          | -> 데이터 처리 방식, Default-File, allow_value:FILE,SYSLOG
+| audit_log_include_accounts  |               | -> 로깅에 포함할 사용자 계정 , 쉼표로 구분하여 지정
+| audit_log_include_commands  |               | -> 로깅에 포함할 쿼리문
+| audit_log_include_databases |               | -> 로깅에 포함할 데이터베이스
+| audit_log_policy            | ALL           | -> 로깅 정책, Default - ALL , Allow_value - ALL,LOGINS,QUERIES
+| audit_log_rotate_on_size    | 0             | -> 지정된 바이트 초고화면 log rotate
+| audit_log_rotations         | 0             | -> 유지할 logrotate 파일 수
+| audit_log_strategy          | ASYNCHRONOUS  | -> 로그 쓰기 전략 Default - ASYNCHRONOUS(비동기 쓰기, 성능최적화) / PERFORMANCE(최소한의 로깅, 빠름), SYNC(동기쓰기, 신뢰성 높음, 성능저하가능)
+| audit_log_syslog_facility   | LOG_USER      | -> SYSLOG 사용시 로그의 facility 설정, LOG_USER(default),LOG_AUTH,LOG_DAEMON
+| audit_log_syslog_ident      | percona-audit | -> SYSLOG 식별자 설정
+| audit_log_syslog_priority   | LOG_INFO      | -> syslog 로그 메시지의 우선순위 / LOG_INFO(default), LOG_WARNING,LOG_ERR
++-----------------------------+---------------+
+
+-- 실행중 적용 사항
+SET GLOBAL audit_log_exclude_accounts = '모니터링 계정, 서비스 계정';
+-> 서비스 계정을 제외한 사용자 계정만 로깅을 하면 로그 사이즈에 대한 부담이 없을듯.
+
+
+mysql> SET GLOBAL audit_log_format = 'JSON';
+ERROR 1238 (HY000): Variable 'audit_log_format' is a read only variable
+-> 몇몇 설정값들은 실행중에 변경을 하지 못한다. my.cnf에 입력 후 설정값 변경 필요.
+   (log_foramt, audit_log_strategy 등... )
+
+
+----리부팅후에도 적용 되게끔 -----
+
+vi /etc/my.cnf
+
+[Mysqld]
+audit_log_rotations = 5
+audit_log_buffer_size = 15728640
+#audit_log_rotate_on_size  = 20971520
+audit_log_policy = ALL
+#audit_log_include_accounts = 'test@localhost,root@localhost'
+audit_log_exclude_accounts = '모니터링 계정@'ip', 서비스 계정'ip'
+audit_log_format = JSON
+
+
+--> logRotate 관련 설정은 일별로 나눌수 있는지 확인이 필요.
+--> logRotate 밑에 내용있음.   
+
+
+============= MariaDB Audit  Install ========================
+
+-- mysql user&group 추가--
+groupadd mysql
+useradd -r -g mysql mysql
+
+
+-- my.cnf 생성
+touch /etc/my.cnf
+vi /etc/my.cnf
+----------------------------------------
+[mysqld]
+datadir=/data/
+socket=/var/lib/mysql/mysql.sock
+
+[mysqld_safe]
+log_error=/var/log/mysql/error.log
+pid-file=/var/run/mysql/mysql.pid
+
+-----------------------------------------
+-> 테스트 용이니 간단하게만 세팅
+
+
+
+//MariaDB 압축해제후 심볼릭 링크 연결
+
+cd /usr/local
+ln -s /storage/mariadb-10.6.7-linux-systemd-x86_64 mysql
+
+
+
+//데이터 디렉토리 생성
+mkdir -p /data/
+chown -R mysql:mysql /data
+chmod 755 /data
+
+mkdir -p /var/lib/mysql
+mkdir -p /var/log/mysql
+mkdir -p /var/run/mysql
+
+chown mysql:mysql /var/lib/mysql
+chmod 755 /var/lib/mysql
+
+chown mysql:mysql /var/log/mysql
+chmod 755 /var/log/mysql
+
+chown mysql:mysql /var/run/mysql
+chmod 755 /var/run/mysql
+
+
+
+./scripts/mysql_install_db --user=mysql
+
+./scripts/mysql_install_db --user=mysql
+
+/usr/local/mysql/bin/mysqld_safe --defaults-file=/etc/my.cnf --user=mysql &
+
+ mariadb -u root -p
+bash: mariadb: 명령을 찾을 수 없습니다...
+'mariadb' 명령을 제공하는 'mariadb' 꾸러미를 설치하시겠습니까? [N/y] y
+
+
+ * 큐 대기 중... 
+ * 패키지 목록을 불러오고 있습니다.... 
+다음 패키지를 설치해야 합니다:
+ mariadb-3:10.5.22-1.el9_2.x86_64	A very fast and robust SQL database server
+ mariadb-common-3:10.5.22-1.el9_2.x86_64	The shared files required by server and client
+ mariadb-connector-c-3.2.6-1.el9_0.x86_64	The MariaDB Native Client library (C driver)
+ mariadb-connector-c-config-3.2.6-1.el9_0.noarch	Configuration files for packages that use /etc/my.cnf as a configuration file
+변경 사항을 수행하시겠습니까? [N/y] y
+
+
+ * 큐 대기 중... 
+ * 인증 대기 중... 
+ * 큐 대기 중... 
+ * 패키지 다운로드 중... 
+ * 데이터 요청 중... 
+ * 변경 사항 시험 중... 
+ * 패키지 설치 중... 
+Enter password: 
+
+alter user 'root'@'localhost' identified by '패스워드';
+flush privileges;
+
+
+MariaDB [(none)]> SHOW GLOBAL VARIABLES LIKE 'plugin_dir';
++---------------+------------------------------+
+| Variable_name | Value                        |
++---------------+------------------------------+
+| plugin_dir    | /usr/local/mysql/lib/plugin/ |
++---------------+------------------------------+
+
+
+
+[joy-dba@vbox plugin]$   ll | grep audit
+-rwxr-xr-x 1 joy-dba joy-dba    297736  2월 11  2022 server_audit.so
+
+
+INSTALL SONAME 'server_audit';
+
+
+---------my.cnf ------------------
+-> 재시작후에도 플러그인이 로드 되게끔 아래 변수들 추가
+
+[mariadb]
+plugin_load_add = server_audit
+server_audit_logging=ON
+server_audit=FORCE_PLUS_PERMANENT
+server_audit_events=CONNECT,QUERY,TABLE,QUERY_DDL,QUERY_DML,QUERY_DCL
+server_audit_excl_users=서비스계정, 모니터링계정, 이외 추가할 계정
+
+
+
+**Test진행버전은 Mariadb 10.6.7 
+server_audit_events Valid Values:
+CONNECT, QUERY, TABLE (MariaDB Audit Plugin < 1.2.0)
+CONNECT, QUERY, TABLE, QUERY_DDL, QUERY_DML (MariaDB Audit Plugin >= 1.2.0)
+CONNECT, QUERY, TABLE, QUERY_DDL, QUERY_DML, QUERY_DCL (MariaDB Audit Plugin >=1.3.0)
+CONNECT, QUERY, TABLE, QUERY_DDL, QUERY_DML, QUERY_DCL, QUERY_DML_NO_SELECT (MariaDB Audit Plugin >= 1.4.4)
+
+https://mariadb.com/kb/en/mariadb-audit-plugin-versions/
+
+----------------------------------
+MariaDB [(none)]> INSTALL SONAME 'server_audit';
+Query OK, 0 rows affected (0.006 sec)
+
+MariaDB [(none)]> show global variables like '%audit%'
+    -> ;
++-------------------------------+-----------------------+
+| Variable_name                 | Value                 |
++-------------------------------+-----------------------+
+| server_audit_events           |                       | - 로깅할 이벤트 유형 (allow_value : CONNECT/QUERY/TABLE) , 콤마로 구분해 설정 가능, 빈값(default value)이면 이벤트를 기록하지 않음
+| server_audit_excl_users       |                       | - 특정 사용자를 로깅에서 제외, 쉼표로 구분, (default_value : 빈값) , 접속에 관해서는 예외없이 기록함
+| server_audit_file_path        | server_audit.log      | - 감사로그가 저장될 파일의 경로 및 이름 (절대경로 없을시 data디렉토리)
+| server_audit_file_rotate_now  | OFF                   | - 즉시 로그 파일 회전을 수행할지 여부를 설정(allow_value : ON/OFF)
+| server_audit_file_rotate_size | 1000000               | - 로그 파일이 해당 크기에 도달하면 rotate (default - 0(rotate 비활성화))
+| server_audit_file_rotations   | 9                     | - 유지할 로그 로테이트 파일
+| server_audit_incl_users       |                       | - 특정 사용자만 로깅 대상으로 설정(콤마로 구분)
+| server_audit_logging          | OFF                   | - 감사 로깅 기능 활성화/비활성화 (allow_vlaue : ON/OFF)
+| server_audit_mode             | 0                     | - 작동 방식 설정 (default : 0) / (allow_value : 0 - 비활성화, 1- 로깅 활성화, 2- 로깅 및 블로킹 활성화(권한 없는 접근 차단))
+| server_audit_output_type      | file                  | - 감사 로그 출력 형식 (allow_value : file/syslog) default - file
+| server_audit_query_log_limit  | 1024                  | - 저장할 최대 길이 (default - 1024)
+| server_audit_syslog_facility  | LOG_USER              | - syslog 메시지가 기록된 시설 지정
+| server_audit_syslog_ident     | mysql-server_auditing | - 식별자 지정 (default - mysql-server_auditing)
+| server_audit_syslog_info      |                       | - Syslog 메시지가 추가 정보를 포함시킬지 설정
+| server_audit_syslog_priority  | LOG_INFO              | - Syslog 메시지의 우선 순위를 설정
++-------------------------------+-----------------------+
+
+
+SET GLOBAL server_audit_logging=ON;
+SET GLOBAL server_audit_excl_users='서비스계정, 모니터링 계정';
+*Percona plugin과는 다르게 ip지정 필요x
+
+[root@vbox data]# cat server_audit.log
+20241129 10:49:49,vbox,root,localhost,3,9,QUERY,,'SET GLOBAL server_audit_logging=ON',0
+20241129 10:49:51,vbox,root,localhost,3,10,QUERY,,'select 1',0
+20241129 10:49:52,vbox,root,localhost,3,11,QUERY,,'select 2',0
+20241129 11:05:07,vbox,root,localhost,3,12,QUERY,,'create database test',1007
+20241129 11:05:17,vbox,root,localhost,3,13,QUERY,,'show databases',0
+20241129 11:05:19,vbox,root,localhost,3,14,QUERY,,'create database test2',0
+
+-Mariadb Audit Plugin Log Format
+[timestamp],[serverhost],[username],[host],[connectionid],
+[queryid],[operation],[database],[object],[retcode]
+* 위 로그와 매핑해가면서 확인요망!!
+ -> mariadb foramt 지정기능이 없는듯!!
+
+
+
+=========== Audit Log logrotate ================
+
+**mysql도 동일하게 하면될듯/
+
+touch /etc/logrotate.d/mariadb
+vi /etc/logrotate.d/mariadb
+
+--------------------------------------------------
+/data/server_audit.log {
+    daily
+    rotate 3
+    missingok
+    notifempty
+    dateext
+	ifempty
+    create 640 mysql mysql
+    sharedscripts
+    postrotate
+    endscript
+}
+-----------------------------------------------------
+postrotate/endscript -> 로테이트 진행후 스크립트 실행, 크론탭으로할지 해당값 사용할지는 알아서
+ex)
+postrotate
+  python3 /backup/scripts/logrotate.py
+endscript
+
+
+dateext -> YYYYMMDD
+dateformat 옵션 사용하면 dateext 포맷 지정 가능.
+
+
+logrotate -d /etc/logrotate.d/mariadb
+->debug 명령어
+
+logrotate -f /etc/logrotate.d/mariadb
+->강제 명령어
+
+cat /var/lib/logrotate/logrotate.status 
+-> 로그로테이트 로그 확인가능, OS 마다 다를수도..
+
+root@vbox data]# ll
+-rw-rw---- 1 mysql mysql      5007 12월  2 11:07 server_audit.log
+-rw-r----- 1 mysql mysql      5007 12월  2 11:32 server_audit_bkup.log
+
+[root@vbox data]# logrotate -f /etc/logrotate.d/mariadb
+[root@vbox data]# ll
+-rw-r----- 1 mysql mysql         0 12월  2 11:36 server_audit.log
+-rw-rw---- 1 mysql mysql      5007 12월  2 11:07 server_audit.log-20241202
+-rw-r----- 1 mysql mysql      5007 12월  2 11:32 server_audit_bkup.log
+
+
+crontab -e
+0 6 * * * /usr/sbin/logrotate -f /etc/logrotate.d/mariadb
+->알아서 시간 값 수정
+
+
+감사로그 s3로 보내는 스크립트 작성
+**audit_to_s3.py**
+해당 스크립트 로그로테이트와 크론탭 시간을 잘 맞춰서 사용하든,
+logrotate 설정파일 내에서 값 추가해서 사용하든 될듯
