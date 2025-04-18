@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-replica
+spec:
+  selector:
+    app: mysql
+    role: replica
+  ports:
+    - port: 3306
+      targetPort: 3306

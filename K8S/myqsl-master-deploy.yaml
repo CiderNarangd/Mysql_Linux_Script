@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+      role: master
+  template:
+    metadata:
+      labels:
+        app: mysql
+        role: master
+    spec:
+	  nodeName: k8s-worker-1
+      containers:
+        - name: mysql
+          image: mysql:8.4
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-root-pass
+                  key: password
+          volumeMounts:
+            - name: config
+              mountPath: /etc/mysql/conf.d
+            - name: data
+              mountPath: /data2
+      volumes:
+        - name: config
+          configMap:
+            name: mysql-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: mysql-master-pvc

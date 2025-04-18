@@ -1,0 +1,479 @@
+쿠버네티스 기반 MySQL Master-Source Replica 구성
+
+설치 항목				마스터 노드	워커 노드	설명
+containerd				✅ 필수		✅ 필수		컨테이너 실행을 위한 런타임
+kubeadm					✅ 필수		✅ 필수		Kubernetes 클러스터 초기화 및 관리
+kubelet					✅ 필수		✅ 필수		노드에서 Pod 실행 및 관리
+kubectl					✅ 필수		❌ 선택		Kubernetes 명령어 도구 (마스터에서 주로 사용)
+쿠버네티스 컨트롤 플레인	✅ 필수		❌ 불필요	API 서버, 컨트롤러 매니저, 스케줄러 실행
+네트워크 플러그인			✅ 필수		✅ 필수		Pod 간 통신을 위한 CNI 플러그인 (예: Calico, Flannel 등) * 해당 작업에선 Calico 사용 
+
+호스트 사양
+Core 	- 2 Core
+Mem 	- 4gb
+Storage - 20Gb
+O/S     - Oracle Linux 9.4 
+
+Master Node - 220.120.157.78
+worker-1	- 222.117.225.67	-> Mysql Source
+worker-2	- 175.214.6.212		-> Mysql Replica
+
+
+=============== Master & Wordker 공동 작업 =============
+
+### Hostname 변경
+hostnamectl set-hostname k8s-master    		-> Master Node
+hostnamectl set-hostname k8s-worker-1    	-> Worker Node-1
+hostnamectl set-hostname k8s-worker-2    	-> Worker Node-2
+
+vi /etc/hosts
+-> 호스트별로 매핑 적용
+220.120.157.78 k8s-master 		-> 마스터
+222.117.225.67 k8s-worker-1 	-> 워커1
+175.214.6.212  k8s-worker-2 	-> 워커2
+127.0.0.1	   NodeHostName		-> 전체호스트
+
+
+### 방화벽 비활성화
+systemctl stop firewalld
+systemctl disable firewalld
+#systemctl enable firewalld
+* Test 환경이기에 편의상 비활성화
+
+
+### 유틸 설치&업데이트
+dnf install -y wget curl tar iproute iptables conntrack-tools \
+  socat ebtables ethtool util-linux
+
+yum install -y yum-utils
+
+### 모듈 설정
+# 커널 모듈
+modprobe overlay
+modprobe br_netfilter
+
+cat <<EOF | tee /etc/modules-load.d/containerd.conf
+overlay
+br_netfilter
+EOF
+
+cat <<EOF | tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+EOF
+
+sysctl --system
+
+
+### bin 디렉토리 환경변수등록
+echo 'export PATH=$PATH:/usr/local/bin' >> ~/.bashrc
+echo 'export PATH=$PATH:/usr/local/sbin' >> ~/.bashrc
+source ~/.bashrc
+
+### runc 설치
+cd /storage/download
+wget https://github.com/opencontainers/runc/releases/download/v1.2.6/runc.amd64
+install -m 755 runc.amd64 /usr/local/sbin/runc
+runc --version
+runc version 1.2.6
+commit: v1.2.6-0-ge89a2992
+spec: 1.2.0
+go: go1.23.7
+libseccomp: 2.5.5
+
+
+### Containerd 설치
+cd /storage/download
+wget https://github.com/containerd/containerd/releases/download/v1.7.27/containerd-1.7.27-linux-amd64.tar.gz
+tar -xvf containerd-1.7.27-linux-amd64.tar.gz
+cd /storage/download/bin
+
+mv containerd containerd-shim containerd-shim-runc-v1 containerd-shim-runc-v2 containerd-stress ctr /usr/local/bin
+
+containerd --version
+containerd github.com/containerd/containerd v1.7.27 05044ec0a9a75232cad458027ca83437aae3f4da
+
+--Systemd 등록
+wget https://raw.githubusercontent.com/containerd/containerd/main/containerd.service -O /etc/systemd/system/containerd.service
+
+systemctl daemon-reexec
+systemctl daemon-reload
+systemctl enable --now containerd 
+
+--config 셋팅
+mkdir -p /etc/containerd
+containerd config default > /etc/containerd/config.toml
+
+->SystemdCgroup = true ,  sandbox_image = "registry.k8s.io/pause:3.10" 변경
+**config.toml 
+
+--reboot or containerd 재시작
+
+
+cni bin설치(마스터만)
+cd /storage/download
+mkdir -p /opt/cni/bin
+wget https://github.com/containernetworking/plugins/releases/download/v1.6.2/cni-plugins-linux-amd64-v1.6.2.tgz
+tar -C /opt/cni/bin -xvf cni-plugins-linux-amd64-v1.6.2.tgz
+
+
+## Kubernetes 설치
+
+kubernetes yum 저장소 등록
+cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.32/rpm/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.32/rpm/repodata/repomd.xml.key
+EOF
+
+yum install -y kubelet kubeadm kubectl
+
+kubeadm init \
+  --pod-network-cidr=192.168.0.0/16 \
+  --kubernetes-version=v1.32.3 \
+  --apiserver-advertise-address=220.120.157.78
+  
+  ** address= ifconfig or ip a 
+** Init 명령어는 마스터 노드에서만 실행
+** join 명령어는 워커 노드에서만 실행
+
+systemctl enable --now kubelet
+
+====================================================================================================
+
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 220.120.157.78:6443 --token 69si3f.kvevuop9mx71g4sk \
+	--discovery-token-ca-cert-hash sha256:29ec67f768ee0ce4acb9f12b7a7bad4e48c49ac9d32036eb70744f8abc4f7570 
+
+====================================================================================================
+--> Init 성공 여부 확인
+
+export KUBECONFIG=/etc/kubernetes/admin.conf
+
+echo 'export KUBECONFIG=/etc/kubernetes/admin.conf' >> /root/.bash_profile
+source /root/.bash_profile
+
+echo 'export KUBECONFIG=/etc/kubernetes/admin.conf' >> ~/.bashrc
+source ~/.bashrc
+
+### Calico Install (*마스터 노드에만 설치)
+
+kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/calico.yaml
+kubectl get pods -n kube-system
+kubectl get nodes
+
+[root@k8s-master kinam]# kubectl get pods -n kube-system
+NAME                                       READY   STATUS    RESTARTS   AGE
+calico-kube-controllers-75cd4cc5b9-hdqhp   1/1     Running   0          83s
+calico-node-w987l                          1/1     Running   0          83s
+coredns-668d6bf9bc-5mcb9                   1/1     Running   0          4m34s
+coredns-668d6bf9bc-5v2rn                   1/1     Running   0          4m34s
+etcd-k8s-master                            1/1     Running   0          4m40s
+kube-apiserver-k8s-master                  1/1     Running   0          4m40s
+kube-controller-manager-k8s-master         1/1     Running   0          4m40s
+kube-proxy-hd4w9                           1/1     Running   0          4m34s
+kube-scheduler-k8s-master                  1/1     Running   0          4m40s
+[root@k8s-master kinam]# kubectl get nodes
+NAME         STATUS   ROLES           AGE     VERSION
+k8s-master   Ready    control-plane   4m46s   v1.32.3
+
+
+=============== Worker Node 구축 ===============
+
+** Init 및 Calico 설치를 제외하고 위 내용대로 동일하게 설치
+
+-- Master Node에 조인
+
+kubeadm join 220.120.157.78:6443 --token 69si3f.kvevuop9mx71g4sk \
+	--discovery-token-ca-cert-hash sha256:29ec67f768ee0ce4acb9f12b7a7bad4e48c49ac9d32036eb70744f8abc4f7570 
+	
+
+-- node & Pod 확인
+---> Master 노드에서 아래 명렁어로 Node 조인 여부와 Pod 확인
+kubectl get nodes
+NAME           STATUS   ROLES           AGE     VERSION
+k8s-master     Ready    control-plane   6h49m   v1.32.3
+k8s-worker-1   Ready    <none>          80m     v1.32.3
+k8s-worker-2   Ready    <none>          60s     v1.32.3
+
+kubectl get pods
+NAME                             READY   STATUS    RESTARTS   AGE
+mysql-master-76bd67fc99-7t7dk    1/1     Running   0          13m
+mysql-replica-856d959d44-k92bc   1/1     Running   0          43s
+
+
+* 호스트 재시작시 Master -> Worker 노드순으로 (Master -> Worker1(Mysql Source) -> Worker2(Mysql Replica))
+
+
+
+### 각 워커노드에 Mysql 배포
+
+-- Master노드에서 yaml 파일들 생성후 아래 명령어 실행
+Master Node
+mkdir -p /storage/k8s_deploy -> yaml파일들 저장공간
+
+WorkerNode
+mkdir -p /data2/
+-> 복제용 호스트에 Mysql이 이미 설치되어 있고 /data 디렉토리 사용중이기때문에 쿠버네티스 Mysql 전용 /data2 디렉토리 생성
+
+-- 아래 명령어로 mysql 배포
+kubectl apply -f mysql-config.yaml
+kubectl apply -f mysql-config-replica.yaml
+-> mysql config 배포(my.cnf)
+
+kubectl create secret generic mysql-root-pass --from-literal=password=kinam12!@
+kubectl create secret generic mysql-repl-pass --from-literal=password=kinam12!@
+-> mysql root 패스워드 지정
+
+kubectl apply -f mysql-master-pv.yaml
+kubectl apply -f mysql-master-pvc.yaml
+kubectl apply -f mysql-master-deploy.yaml
+kubectl apply -f mysql-master-svc.yaml
+
+kubectl apply -f mysql-replica-pv.yaml
+kubectl apply -f mysql-replica-pvc.yaml
+kubectl apply -f mysql-replica-deploy.yaml
+kubectl apply -f mysql-replica-svc.yaml
+
+
+***
+--Pod 제거 후 재배포 명령어
+kubectl delete deployment mysql-master
+kubectl delete pvc mysql-master-pvc
+kubectl delete pv mysql-master-pv
+
+
+[root@k8s-master k8s_deploy]# kubectl get nodes
+NAME           STATUS   ROLES           AGE   VERSION
+k8s-master     Ready    control-plane   32h   v1.32.3
+k8s-worker-1   Ready    <none>          26h   v1.32.3
+k8s-worker-2   Ready    <none>          25h   v1.32.3
+
+[root@k8s-master k8s_deploy]# kubectl get pods
+NAME                             READY   STATUS    RESTARTS   AGE
+mysql-master-76bd67fc99-7t7dk    1/1     Running   0          13m
+mysql-replica-856d959d44-k92bc   1/1     Running   0          43s
+[root@k8s-master k8s_deploy]# 
+
+
+[root@k8s-worker-1 data2]# crictl ps
+WARN[0000] Config "/etc/crictl.yaml" does not exist, trying next: "/usr/bin/crictl.yaml" 
+WARN[0000] runtime connect using default endpoints: [unix:///run/containerd/containerd.sock unix:///run/crio/crio.sock unix:///var/run/cri-dockerd.sock]. As the default settings are now deprecated, you should set the endpoint instead. 
+WARN[0000] Image connect using default endpoints: [unix:///run/containerd/containerd.sock unix:///run/crio/crio.sock unix:///var/run/cri-dockerd.sock]. As the default settings are now deprecated, you should set the endpoint instead. 
+CONTAINER           IMAGE               CREATED             STATE               NAME                ATTEMPT             POD ID              POD                             NAMESPACE
+f6ab7a18edd12       3f7ec93b2d27e       13 minutes ago      Running             mysql               0                   cfcd1b25684ed       mysql-master-76bd67fc99-7t7dk   default
+cbe7a7fc46936       1843802b91be8       11 hours ago        Running             calico-node         2                   eb280df4219d0       calico-node-b2bw9               kube-system
+87184419ea865       a1ae78fd2f9d8       11 hours ago        Running             kube-proxy          2                   bb75923f4768c       kube-proxy-nzxpw                kube-system
+
+
+[root@k8s-worker-2 kinam]# crictl ps
+WARN[0000] Config "/etc/crictl.yaml" does not exist, trying next: "/usr/bin/crictl.yaml" 
+WARN[0000] runtime connect using default endpoints: [unix:///run/containerd/containerd.sock unix:///run/crio/crio.sock unix:///var/run/cri-dockerd.sock]. As the default settings are now deprecated, you should set the endpoint instead. 
+WARN[0000] Image connect using default endpoints: [unix:///run/containerd/containerd.sock unix:///run/crio/crio.sock unix:///var/run/cri-dockerd.sock]. As the default settings are now deprecated, you should set the endpoint instead. 
+CONTAINER           IMAGE               CREATED              STATE               NAME                ATTEMPT             POD ID              POD                              NAMESPACE
+ea2562f4a71e0       3f7ec93b2d27e       About a minute ago   Running             mysql               0                   1cbbc96a8d3c9       mysql-replica-856d959d44-k92bc   default
+d9420e45b03ea       1843802b91be8       11 hours ago         Running             calico-node         2                   866b9bebcf947       calico-node-d6r7z                kube-system
+8d1fe6de2e3cb       a1ae78fd2f9d8       11 hours ago         Running             kube-proxy          2                   0e430f477dc1f       kube-proxy-ksgkk                 kube-system
+
+
+**crictl exec -it < container_id > bash
+-> 워커노드에서 Pod 접속하는 명령어
+
+kubectl rollout restart deployment mysql-master
+kubectl rollout restart deployment mysql-replica
+*단일 배포하면 pod 이름이 변경되기 때문에,
+고정하고 싶으면 statefulset 으로 배포해야함
+일단 단일 배포로 구성해보고 추후 Stateful로 클러스터 구성해볼 예정
+
+
+[root@k8s-master k8s_deploy]# kubectl get svc
+NAME            TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+kubernetes      ClusterIP   10.96.0.1       <none>        443/TCP    33h
+mysql-master    ClusterIP   10.105.38.200   <none>        3306/TCP   76m
+mysql-replica   ClusterIP   10.100.200.25   <none>        3306/TCP   50m
+
+** 테스트 환경이기에 pv,pvc 배포시 호스트명을 지정하지 않았고, 차후 여러대의 서버를 관리하고 배포해야 할경우 호스트명 지정 필요해 보임
+
+
+-> Mysql Replication 연결
+
+마스터노드에서 아래명령어로 워커노드 접속가능
+kubectl exec -it <pod_name> -- bash
+
+kubectl exec -it mysql-master-76bd67fc99-7t7dk -- bash
+--> 워커1-mysql-master 서버 접속
+
+kubectl exec -it mysql-replica-856d959d44-k92bc -- bash
+--> 워커2-mysql-replica 서버 접속
+
+
+----- MysqlSource Server -----
+--> 리플리케이션용 계정 생성
+CREATE USER 'repl'@'%' IDENTIFIED BY 'kinam12!@';
+GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';
+FLUSH PRIVILEGES;
+
+--> Binlog 파일 및 Pos 확인
+mysql> SHOW BINARY LOG STATUS;
++------------------+----------+--------------+------------------+-------------------+
+| File             | Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set |
++------------------+----------+--------------+------------------+-------------------+
+| mysql-bin.000003 |     1250 |              |                  |                   |
++------------------+----------+--------------+------------------+-------------------+
+1 row in set (0.00 sec)
+
+----- MysqlReplica Server -----
+STOP replica;
+CHANGE REPLICATION SOURCE TO
+  SOURCE_HOST='10.105.38.200',  		
+  SOURCE_PORT=3306,
+  SOURCE_USER='repl',
+  SOURCE_PASSWORD='kinam12!@',
+  SOURCE_LOG_FILE='mysql-bin.000004',      
+  SOURCE_LOG_POS=1250,
+  GET_SOURCE_PUBLIC_KEY=1;  
+
+START replica;
+
+mysql> show replica status \G;
+*************************** 1. row ***************************
+             Replica_IO_State: Waiting for source to send event
+                  Source_Host: 10.105.38.200
+                  Source_User: repl
+                  Source_Port: 3306
+                Connect_Retry: 60
+              Source_Log_File: mysql-bin.000004
+          Read_Source_Log_Pos: 1179
+               Relay_Log_File: mysql-replica-587df4ff8-7hq86-relay-bin.000002
+                Relay_Log_Pos: 328
+        Relay_Source_Log_File: mysql-bin.000004
+           Replica_IO_Running: Yes
+          Replica_SQL_Running: Yes
+              Replicate_Do_DB: 
+          Replicate_Ignore_DB: 
+           Replicate_Do_Table: 
+       Replicate_Ignore_Table: 
+      Replicate_Wild_Do_Table: 
+  Replicate_Wild_Ignore_Table: 
+                   Last_Errno: 0
+                   Last_Error: 
+                 Skip_Counter: 0
+          Exec_Source_Log_Pos: 1179
+              Relay_Log_Space: 563
+              Until_Condition: None
+               Until_Log_File: 
+                Until_Log_Pos: 0
+           Source_SSL_Allowed: No
+           Source_SSL_CA_File: 
+           Source_SSL_CA_Path: 
+              Source_SSL_Cert: 
+            Source_SSL_Cipher: 
+               Source_SSL_Key: 
+        Seconds_Behind_Source: 0
+Source_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error: 
+               Last_SQL_Errno: 0
+               Last_SQL_Error: 
+  Replicate_Ignore_Server_Ids: 
+             Source_Server_Id: 1
+                  Source_UUID: 9a7a6b1a-1a28-11f0-bee7-22360af1612b
+             Source_Info_File: mysql.slave_master_info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+    Replica_SQL_Running_State: Replica has read all relay log; waiting for more updates
+           Source_Retry_Count: 10
+                  Source_Bind: 
+      Last_IO_Error_Timestamp: 
+     Last_SQL_Error_Timestamp: 
+               Source_SSL_Crl: 
+           Source_SSL_Crlpath: 
+           Retrieved_Gtid_Set: 
+            Executed_Gtid_Set: 
+                Auto_Position: 0
+         Replicate_Rewrite_DB: 
+                 Channel_Name: 
+           Source_TLS_Version: 
+       Source_public_key_path: 
+        Get_Source_public_key: 1
+            Network_Namespace: 
+1 row in set (0.00 sec)
+
+
+
+### 쿠버네티스 대시보드 배포 ###
+version - 7.11
+
+-- Helm 설치--
+helm install
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+helm version
+
+--helm 저장소 등록 및 설치
+helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
+helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
+
+
+Release "kubernetes-dashboard" does not exist. Installing it now.
+NAME: kubernetes-dashboard
+LAST DEPLOYED: Thu Apr 17 01:41:52 2025
+NAMESPACE: kubernetes-dashboard
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+*************************************************************************************************
+*** PLEASE BE PATIENT: Kubernetes Dashboard may need a few minutes to get up and become ready ***
+*************************************************************************************************
+
+Congratulations! You have just installed Kubernetes Dashboard in your cluster.
+
+To access Dashboard run:
+  kubectl -n kubernetes-dashboard port-forward svc/kubernetes-dashboard-kong-proxy 8443:443
+
+NOTE: In case port-forward command does not work, make sure that kong service name is correct.
+      Check the services in Kubernetes Dashboard namespace using:
+        kubectl -n kubernetes-dashboard get svc
+
+Dashboard will be available at:
+  https://localhost:8443
+
+
+--대시보드 백그라운드 실행
+nohup kubectl -n kubernetes-dashboard port-forward svc/kubernetes-dashboard-kong-proxy 8443:443 > /tmp/k8s_dashboard_portforward.log 2>&1 &
+
+-- sa 계정 생성
+kubectl create serviceaccount dashboard-admin-sa -n kubernetes-dashboard
+
+-- 권한부여
+kubectl create clusterrolebinding dashboard-admin-sa-binding \
+  --clusterrole=cluster-admin \
+  --serviceaccount=kubernetes-dashboard:dashboard-admin-sa
+
+--대시보드 접속을 위한 토큰 생성
+[root@k8s-master kinam]# kubectl -n kubernetes-dashboard create token dashboard-admin-sa
+eyJhbGciOiJSUzI1NiIsImtpZCI6IjVlN0VFUWFCY2NULWE0U3NOSkxTMnVyQmx6Snk2eXlwZ2RIcVFkTEtRckEifQ.eyJhdWQiOlsiaHR0cHM6Ly9rdWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwiXSwiZXhwIjoxNzQ0ODI1OTk3LCJpYXQiOjE3NDQ4MjIzOTcsImlzcyI6Imh0dHBzOi8va3ViZXJuZXRlcy5kZWZhdWx0LnN2Yy5jbHVzdGVyLmxvY2FsIiwianRpIjoiNTE5MjYxMTItNGFmNy00ZjVhLWI1ODMtNzZhMWYwYzMzMzU2Iiwia3ViZXJuZXRlcy5pbyI6eyJuYW1lc3BhY2UiOiJrdWJlcm5ldGVzLWRhc2hib2FyZCIsInNlcnZpY2VhY2NvdW50Ijp7Im5hbWUiOiJkYXNoYm9hcmQtYWRtaW4tc2EiLCJ1aWQiOiIwM2YzYTg1Yi1mMGVlLTRlOTAtOWI0ZC0xNjExYjZkYTg3MjEifX0sIm5iZiI6MTc0NDgyMjM5Nywic3ViIjoic3lzdGVtOnNlcnZpY2VhY2NvdW50Omt1YmVybmV0ZXMtZGFzaGJvYXJkOmRhc2hib2FyZC1hZG1pbi1zYSJ9.oeCAFSC6VoDgYAOSnpEmoLfA2qLdeesL2FxvlM-vLOGmfIX0P7XYkcMJyf5tJiLKz8ga2nrMwi0XBl3xsMm9urMwYh9BnqNLJQvqvLxml1mBp_Jg0uAxiYXeQWloBsnyuXeCvr6wp7DOQ47VpLNGCa2Y9_sY8IcDL3jG9L1wmPhWDjMvN3WrSgzzmO5qGHFyzqhw-BLwDum2ybeIqeSvfYIXpd3SMFhMG2wm-MWxRqucS6FNpDDpR_hrYpS8J6Twaf_vkkAZVVQMceaV3I1qD21Y5fOOGu3oTwu1RH9BjjtAt-NEGyDa0zTRx9p11di4HirBeruH_6G9u9rIrZ_MAw
+
+-- 로컬브라우저에서 https://localhost:8443 실행 후 위 토큰을 통하여 접속

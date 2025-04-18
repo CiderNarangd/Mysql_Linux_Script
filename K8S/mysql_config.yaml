@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+data:
+  my.cnf: |
+    [mysqld]
+    server-id=1
+    log-bin=mysql-bin
+    binlog-format=ROW
+    enforce-gtid-consistency=OFF
+    gtid-mode=OFF
+    skip-name-resolve
+    innodb_flush_log_at_trx_commit=1
+    sync_binlog=1
+	datadir=/data2
+	
+
+
+
+**
