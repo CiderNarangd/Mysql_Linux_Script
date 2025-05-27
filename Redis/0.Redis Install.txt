@@ -1,0 +1,111 @@
+Redis Install
+Redis Version - 7.4
+OS : Oracle Linux 9.4
+Storage : 20Gb
+Memory : 4Gb
+
+필수 패키지 설치
+
+dnf groupinstall "Development Tools" -y
+dnf install gcc jemalloc-devel tcl -y
+
+
+//방화벽 설정
+firewall-cmd --permanent --add-port=6379/tcp
+firewall-cmd --reload
+
+Dwonload
+cd /storage/donwload
+wget http://download.redis.io/releases/redis-7.4.2.tar.gz
+
+tar -xvf redis-7.4.2.tar.gz
+make
+make install
+
+
+//계정 생성
+useradd -r -s /sbin/nologin redis
+
+
+//다렉토리 생성
+mkdir /etc/redis/
+mkdir /rdata
+mkdir /rlog
+
+
+//권한부여
+chown -R redis:redis /rdata /rlog
+chmod 770 /rdata /rlog
+
+//systemd 등록
+
+vi /etc/systemd/system/redis.service
+
+=============================================
+[Unit]
+Description=Redis In-Memory Data Store
+After=network.target
+
+[Service]
+User=redis
+Group=redis
+ExecStart=/usr/local/bin/redis-server /etc/redis/redis.conf
+ExecStop=/usr/local/bin/redis-cli shutdown
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+===============================================
+
+systemctl daemon-reexec
+systemctl daemon-reload
+systemctl enable --now redis
+
+
+
+//레디스 설정파일
+vi /etc/redis/redis.conf
+==========================================================
+
+################################## 기본 ##################################
+
+port 6379
+bind 0.0.0.0
+daemonize no
+supervised systemd
+pidfile /var/run/redis_6379.pid
+
+################################## 보안 ##################################
+
+protected-mode yes
+requirepass kinam12!@
+
+################################## 로깅 ##################################
+
+loglevel notice
+logfile /rlog/redis.log
+
+################################## 영속성 ##################################
+
+save 900 1
+save 300 10
+save 60 10000
+
+dbfilename dump.rdb
+dir /rdata
+
+appendonly yes
+appendfilename "appendonly.aof"
+appendfsync everysec
+
+################################## 메모리 ##################################
+
+maxmemory 512mb
+maxmemory-policy noeviction
+
+################################## 기타 ##################################
+
+tcp-keepalive 300
+timeout 0
+
+=================================================================
