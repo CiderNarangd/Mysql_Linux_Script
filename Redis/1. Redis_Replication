@@ -1,0 +1,77 @@
+Redis Replication.
+
+
+Master IP - 211.184.32.109
+Slave IP - 211.51.77.128
+
+//Config 설정
+
+Master Config
+protected-mode no <-변경
+
+------------------------------------------
+
+Slave Config
+replica-read-only yes 			<- 추가
+replicaof 211.184.32.109 6379 	<- 추가
+
+
+
+redis-cli 
+INFO replication
+
+//Master
+127.0.0.1:6379> info replication
+# Replication
+role:master
+connected_slaves:1
+slave0:ip=211.51.77.128,port=6379,state=online,offset=98,lag=0
+master_failover_state:no-failover
+master_replid:bf8fc79557b64ac8e806357f199294c9203c4574
+master_replid2:0000000000000000000000000000000000000000
+master_repl_offset:98
+second_repl_offset:-1
+repl_backlog_active:1
+repl_backlog_size:1048576
+repl_backlog_first_byte_offset:1
+repl_backlog_histlen:98
+127.0.0.1:6379> 
+
+//Slave
+127.0.0.1:6379> info replication
+# Replication
+role:slave
+master_host:211.184.32.109
+master_port:6379
+master_link_status:up
+master_last_io_seconds_ago:0
+master_sync_in_progress:0
+slave_read_repl_offset:112
+slave_repl_offset:112
+slave_priority:100
+slave_read_only:1
+replica_announced:1
+connected_slaves:0
+master_failover_state:no-failover
+master_replid:bf8fc79557b64ac8e806357f199294c9203c4574
+master_replid2:0000000000000000000000000000000000000000
+master_repl_offset:112
+second_repl_offset:-1
+repl_backlog_active:1
+repl_backlog_size:1048576
+repl_backlog_first_byte_offset:15
+repl_backlog_histlen:98
+127.0.0.1:6379> 
+
+
+
+//Test
+Master
+SET test_key "kinam"
+
+127.0.0.1:6379> SET test_key "kinam"
+OK
+
+
+127.0.0.1:6379> get test_key
+"kinam"

@@ -77,8 +77,8 @@ pidfile /var/run/redis_6379.pid
 
 ################################## 보안 ##################################
 
-protected-mode yes
-requirepass kinam12!@
+protected-mode no
+#requirepass kinam12!@
 
 ################################## 로깅 ##################################
 
