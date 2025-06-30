@@ -16,7 +16,7 @@ create table user_game_info(
 -- user_idx pk지정시 페이지 스플릿이 심할것으로 예상되어, 대체키 사용
 -- user_idx 세컨더리 인덱스 지정해서 사용.
 -- 인벤토리 테이블은 유저수가 많아지고 플레이어블 캐릭터가 늘어나고 캐릭터별 인벤토리를 갖게되면 무한정 늘어난다.
--- 차후 압축하여 로우수 줄이는것도 고려 필요.
+-- 차후 압축하여 로우수 줄이는것도 고려 필요.( )
 create table equip_inven(		
 	seq_key bigint IDENTITY (1, 1) not null primary key,				-- 대체 키
 	user_idx bigint not null,											-- 유저 고유값

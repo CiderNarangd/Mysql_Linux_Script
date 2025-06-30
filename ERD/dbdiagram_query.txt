@@ -1,0 +1,294 @@
+
+Table "user_info" {
+  "user_idx" "bigint IDENTITY(10000001,1)" [pk, not null]
+  "user_name" nvarchar(20) [unique, not null]
+  "country_code" char(3) [not null, default: 'zz']
+  "device_name" nvarchar(50) [not null, default: 'zz']
+  "os_version" nvarchar(50) [not null, default: 'zz']
+  "last_login_date" datetime [not null, default: `getdate()`]
+  "user_status" tinyint [not null, default: 0]
+  "is_guest" tinyint [not null, default: 0]
+  "created_date" DATETIME [default: `getdate()`]
+  "updated_date" datetime [default: `getdate()`]
+}
+
+Table "login_info" {
+  "user_idx" bigint
+  "platform_type" tinyint
+  "access_token" nvarchar(300)
+  "refresh_token" nvarchar(300)
+  "created_date" datetime [default: `getdate()`]
+  "updated_date" datetime [default: `getdate()`]
+
+  Indexes {
+    (user_idx, platform_type) [pk, name: "pk_login_user_platform"]
+  }
+}
+
+Table "block_user_list" {
+  "user_idx" bigint [pk]
+  "block_reason" tinyint
+  "block_detail_reason" nvarchar(500) [default: null]
+  "blocked_by" nvarchar(30)
+  "is_active" tinyint [default: 1]
+  "block_start_date" datetime [default: '2000-01-01']
+  "block_end_date" datetime [default: '2000-01-01']
+}
+
+Table "billing" {
+  "seq_key" "bigint IDENTITY(1,1)" [pk]
+  "user_idx" bigint
+  "platform_type" int
+  "status" int
+  "product_id" int
+  "country_code" char(3) [not null, default: 'zz']
+  "amount" decimal(10,2)
+  "currency" nvarchar(5) [default: 'zz']
+  "receipt" nvarchar(300)
+  "fail_reason" nvarchar(300) [default: null]
+  "bill_start_date" datetime [default: `getdate()`]
+  "bill_updated_date" datetime
+  "bill_end_date" datetime
+}
+
+Table "Notice" {
+  "seq_key" "bigint IDENTITY(1,1)" [pk]
+  "notice_type" int [default: 0]
+  "contents" text [default: '']
+  "is_active" tinyint [default: 0]
+  "notice_start_date" datetime [default: '2000-01-01']
+  "notice_end_date" datetime [default: '2000-01-01']
+}
+
+
+Ref: "user_info"."user_idx" < "login_info"."user_idx"
+
+Ref: "user_info"."user_idx" - "block_user_list"."user_idx"
+
+Ref: "user_info"."user_idx" < "billing"."user_idx"
+
+
+
+
+
+  
+Table "user_game_info" {
+  "user_idx" bigint [pk]
+  "user_name" nvarchar(20) [unique]
+  "level" int [default: 1]
+  "exp" int [default: 0]
+  "free_goods" int [default: 0]
+  "paid_goods" int [default: 0]
+  "skill_points" int [default: 0]
+  "score" int
+  "created_date" datetime [default: `getdate()`]
+  "updated_date" datetime [default: `getdate()`]
+}
+
+Table "equip_inven" {
+  "seq_key" "bigint IDENTITY(1,1)" [pk]
+  "user_idx" bigint
+  "item_type" int
+  "item_id" int
+  "option1_id" int [default: 0]
+  "option1_value" int [default: 0]
+  "option2_id" int [default: 0]
+  "option2_value" int [default: 0]
+  "option3_id" int [default: 0]
+  "option3_value" int [default: 0]
+  "is_equipped" tinyint [default: 0]
+  "item_expiration_date" datetime [default: '2050-01-01']
+  "updated_date" datetime
+  "created_date" datetime [default: `getdate()`]
+}
+
+Table "equip_item" {
+  "user_idx" bigint
+  "slot_type" int
+  "inven_index" bigint [default: 0]
+  "equipped_time" datetime [default: `getdate()`]
+}
+
+Table "consumable_inven" {
+  "seq_key" "bigint IDENTITY(1,1)" [pk]
+  "user_idx" bigint
+  "item_type" int
+  "item_id" int
+  "quantity" int
+  "item_expiration_date" datetime [default: '2050-01-01']
+  "updated_date" datetime
+  "created_date" datetime [default: `getdate()`]
+}
+
+Table "Mail" {
+  "seq_key" "bigint IDENTITY(1,1)" [pk]
+  "user_idx" bigint
+  "title" nvarchar(50) [default: '']
+  "contents" nvarchar(300) [default: '']
+  "is_read" tinyint [default: 0]
+  "item_type" int [default: 0]
+  "item_id" int [default: 0]
+  "sented_time" datetime [default: `getdate()`]
+  "expired_date" datetime [default: '2050-01-01']
+}
+
+Table "user_quest" {
+  "user_idx" bigint
+  "quest_id" int
+  "quest_status" int [default: 0]
+  "quest_progress" int [default: 0]
+  "created_date" datetime [default: `getdate()`]
+  "updated_date" datetime [default: `getdate()`]
+}
+
+Table "user_achievement" {
+  "user_idx" bigint [pk]
+  "achievement_cate" int
+  "achievement_id" int
+  "achievement_progress" int
+  "achievement_goal" int
+  "achievement_status" int
+  "created_date" datetime [default: `getdate()`]
+  "updated_date" datetime [default: `getdate()`]
+}
+
+Table "user_skill" {
+  "user_idx" bigint [pk]
+  "skill_id" int
+  "skill_level" int
+  "created_date" datetime [default: `getdate()`]
+}
+
+Table "friend" {
+  "seq_key" "bigint IDENTITY(1,1)" [pk]
+  "user_idx" bigint
+  "friend_idx" bigint
+  "created_date" datetime [default: `getdate()`]
+}
+
+Table "friend_request" {
+  "seq_key" "bigint IDENTITY(1,1)" [pk]
+  "user_idx" bigint
+  "request_user_idx" bigint
+  "status" tinyint [default: 0]
+  "created_date" datetime [default: `getdate()`]
+  "responed_date" datetime
+}
+
+Table "match_history" {
+  "seq_key" "bigint IDENTITY(1,1)" [pk]
+  "user_idx" bigint
+  "opponent_user_idx" bigint
+  "result" tinyint
+  "score" int
+  "opponent_score" int
+  "user_info_list" nvarchar(300)
+  "opponent_info_list" nvarchar(300)
+  "match_time" int
+  "match_start_date" datetime
+  "match_end_date" datetime
+}
+
+Table "daily_ranking" {
+  "rank" "int IDENTITY(1,1)" [pk]
+  "user_idx" bigint
+  "user_name" nvarchar(20)
+  "score" int
+}
+
+Table "leader_board" {
+  "season_idx" int
+  "user_idx" bigint
+  "score" int
+  "created_date" datetime
+  "updated_date" datetime
+
+  Indexes {
+    (season_idx, user_idx) [pk, name: "pk_season_useridx"]
+  }
+}
+
+
+Ref: "user_info"."user_idx" - "user_game_info"."user_idx"
+
+Ref: "user_game_info"."user_idx" < "equip_inven"."user_idx"
+
+
+
+Ref: "user_game_info"."user_idx" < "consumable_inven"."user_idx"
+
+Ref: "user_game_info"."user_idx" < "equip_item"."user_idx"
+
+Ref: "equip_inven"."seq_key" - "equip_item"."inven_index"
+
+Ref: "user_game_info"."user_idx" < "match_history"."user_idx"
+
+Ref: "user_game_info"."user_idx" < "Mail"."user_idx"
+
+Ref: "user_game_info"."user_idx" < "user_skill"."user_idx"
+
+Ref: "user_game_info"."user_idx" < "user_achievement"."user_idx"
+
+Ref: "user_game_info"."user_idx" < "leader_board"."user_idx"
+
+Ref: "user_game_info"."user_idx" < "daily_ranking"."user_idx"
+
+Ref: "user_game_info"."user_idx" < "user_quest"."user_idx"
+Table "guild_info" {
+  "guild_idx" "bigint IDENTITY(10000001,1)" [pk, not null]
+  "guild_name" nvarchar(20) [unique, not null]
+  "guild_master_name" nvarchar(20)
+  "guild_master_idx" bigint
+  "level" int [default: 1]
+  "exp" int [default: 0]
+  "guild_points" int [default: 0]
+  "guild_status" tinyint [not null, default: 0]
+  "comment" nvarchar(300)
+  "member_cnt" int [default: 1]
+  "icon" int [default: 0]
+  "created_date" DATETIME [default: `getdate()`]
+  "updated_date" datetime [default: `getdate()`]
+}
+
+Table "guild_member" {
+  "guild_idx" bigint
+  "user_idx" bigint
+  "user_name" nvarchar(20)
+  "member_grade" int [default: 0]
+  "contribution_point" int
+  "created_date" datetime [default: `getdate()`]
+  "last_login_date" datetime
+  "update_date" datetime [default: `getdate()`]
+
+  Indexes {
+    (guild_idx, user_idx) [pk, name: "pk_guild_member"]
+  }
+}
+
+Table "guild_join_request" {
+  "seq_key" bigint [pk, increment]
+  "guild_idx" bigint
+  "user_idx" bigint
+  "status" tinyint
+  "created_date" datetime [default: `getdate()`]
+  "updated_date" datetime [default: `getdate()`]
+
+  Indexes {
+    guild_idx [name: "IX_request_gidx"]
+    user_idx [name: "IX_request_uidx"]
+    (guild_idx, user_idx) [unique, name: "IX_request_guidx"]
+  }
+}
+
+
+Ref: "guild_info"."guild_idx" < "guild_member"."guild_idx"
+
+Ref: "user_game_info"."user_idx" < "friend"."user_idx"
+
+Ref: "user_game_info"."user_idx" < "friend_request"."user_idx"
+
+Ref: "user_game_info"."user_idx" < "guild_member"."user_idx"
+
+Ref: "guild_info"."guild_idx" < "guild_join_request"."guild_idx"
+
+Ref: "user_game_info"."user_idx" < "guild_join_request"."user_idx"
