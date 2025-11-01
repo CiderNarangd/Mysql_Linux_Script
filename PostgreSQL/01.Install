@@ -1,0 +1,32 @@
+PostgresSQL 17.4 설치
+Oracle Linux 9.4
+
+
+
+필요패키지 설치
+dnf install -y wget tar gcc make readline-devel zlib-devel
+
+
+cd /storage/download/
+wget https://ftp.postgresql.org/pub/source/v17.6/postgresql-17.6.tar.gz
+
+tar -xvf postgresql-17.6.tar.gz 
+
+
+ls -al 
+drwxrwxr-x 6 root root      4096 Aug 12 06:04 postgresql-17.6
+-rw-r--r-- 1 root root  28141372 Aug 12 06:16 postgresql-17.6.tar.gz
+
+
+
+sudo dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+sudo dnf -qy module disable postgresql
+sudo dnf install -y postgresql17-server
+sudo /usr/pgsql-17/bin/postgresql-17-setup initdb
+sudo systemctl enable postgresql-17
+sudo systemctl start postgresql-17
+
+
+
+//postgre 계정 생성
+// 데이터 & 로그 디렉토리 변경
