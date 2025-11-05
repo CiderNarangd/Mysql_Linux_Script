@@ -27,6 +27,30 @@ sudo systemctl enable postgresql-17
 sudo systemctl start postgresql-17
 
 
+ ps -ef | grep postgre
+postgres    1066       1  0 21:50 ?        00:00:00 /usr/pgsql-17/bin/postgres -D /var/lib/pgsql/17/data/
+postgres    1125    1066  0 21:50 ?        00:00:00 postgres: logger 
+postgres    1136    1066  0 21:50 ?        00:00:00 postgres: checkpointer 
+postgres    1137    1066  0 21:50 ?        00:00:00 postgres: background writer 
+postgres    1543    1066  0 21:50 ?        00:00:00 postgres: walwriter 
+postgres    1544    1066  0 21:50 ?        00:00:00 postgres: autovacuum launcher 
+postgres    1545    1066  0 21:50 ?        00:00:00 postgres: logical replication launcher 
+root        4066    4003  0 21:51 pts/0    00:00:00 grep --color=auto postgre
+
+
+bin 경로 - /usr/pgsql-17
+
+
+//데이터베이스 초기화
+/usr/pgsql-17/bin/postgresql-17-setup initdb
+
+
+
 
 //postgre 계정 생성
 // 데이터 & 로그 디렉토리 변경
+
+
+mkdir -p /pgdata
+mkdir -p /pglog
+
